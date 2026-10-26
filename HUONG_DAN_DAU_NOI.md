@@ -27,6 +27,8 @@ Chân và ngưỡng trong firmware nằm ở [esp32-firmware/include/config.h](e
 | LDR (module 3 chân) | DO | GPIO 35 | 3V3 |
 | Còi (module 3 chân) | I/O | GPIO 27 | 3V3 |
 | Relay 2 kênh | IN1 / IN2 | GPIO 25 / GPIO 26 | 5V (VIN) |
+| Servo SG90 (cửa) | dây tín hiệu (cam/vàng) | GPIO 13 | 5V (VIN) + tụ 470 µF, hoặc adapter 5 V riêng (mục 4.8) |
+| Reed switch (cửa) | một chân | GPIO 16 (chân kia nối GND) | – |
 
 Mọi chân `GND` của module đều nối về **ray GND chung**.
 
@@ -185,12 +187,66 @@ Relay 2 – đèn 3,3 V:  3V3   ──► COM2    NO2 ──► đèn (+)     đ
 - Firmware đang giả định relay **kích mức thấp** (`RELAY_ACTIVE_LOW = true`). Mức này **chưa được xác nhận** trên module của nhóm. Nếu vừa cấp nguồn mà relay đã đóng (có tiếng tách, đèn báo trên module sáng, quạt chạy), đổi thành `false` rồi nạp lại.
 - Khi có cảnh báo cháy, firmware tự ngắt cả hai relay để mô phỏng "ngắt cầu dao".
 
+### 4.8. Cửa: servo SG90 và công tắc từ (reed switch)
+
+**Servo SG90** (3 dây): chọn **một** trong hai cách cấp nguồn.
+
+**Cách A – nối vào 5V (VIN) của ESP32** (gọn nhất, đủ cho mô hình khi cấp nguồn qua USB):
+
+| Dây servo | Nối tới |
+|---|---|
+| Nâu/đen (GND) | ray GND |
+| Đỏ (VCC) | ray **5V (VIN)**, chung ray với PIR và relay |
+| Cam/vàng (tín hiệu) | GPIO 13 |
+
+```
+ESP32 VIN ──┬──────────────► servo đỏ (VCC)
+            │
+          [tụ 470–1000 µF]   (chân dài/+ về phía VIN, chân −/vạch trắng về GND)
+            │
+ESP32 GND ──┴──────────────► servo nâu (GND)
+ESP32 GPIO13 ──────────────► servo cam (tín hiệu)
+```
+
+- Chân VIN lấy 5 V từ cổng USB (qua diode trên board nên thường còn khoảng 4,6–4,9 V; servo SG90 vẫn chạy tốt).
+- Servo kéo dòng lớn lúc bắt đầu quay (có thể vài trăm mA, lúc kẹt tới khoảng 0,7 A), cộng với relay và PIR trên cùng đường 5V. **Bắt buộc cắm tụ 470–1000 µF** sát servo để giảm sụt áp.
+- Firmware chỉ phát xung khoảng 0,7 giây mỗi lần đóng/mở rồi ngắt, nên lúc đứng yên servo gần như không tốn điện.
+- Không để cánh cửa bị kẹt hoặc vướng: servo kẹt sẽ kéo dòng tối đa liên tục.
+- Dùng cáp USB tốt, cắm thẳng vào máy (không qua hub).
+- **Dấu hiệu nguồn không đủ:** ESP32 tự khởi động lại mỗi khi cửa mở/đóng, Web báo ESP32 mất kết nối, hoặc log backend ghi `lý do khởi động gần nhất: brownout`. Khi đó chuyển sang **cách B**.
+
+**Cách B – adapter 5 V riêng** (ổn định nhất, nên dùng khi có cả quạt trên relay):
+
+| Dây servo | Nối tới |
+|---|---|
+| Nâu/đen (GND) | GND của adapter **và** ray GND của ESP32 (GND chung) |
+| Đỏ (VCC) | 5V của adapter |
+| Cam/vàng (tín hiệu) | GPIO 13 |
+
+- **Không nối** 5V của adapter vào chân VIN của ESP32 khi đang cắm USB (hai nguồn 5 V chập nhau).
+- Vẫn cắm tụ 470–1000 µF giữa 5V và GND sát servo.
+- Nếu quạt (relay 1) cũng chạy bằng adapter, có thể cấp chung adapter 5 V–2 A cho cả quạt và servo.
+
+**Sau khi nối (cả hai cách):**
+- Gắn cánh tay servo vào cánh cửa mô hình. Firmware dùng 0° là **đóng**, 90° là **mở** (`DOOR_CLOSED_ANGLE` / `DOOR_OPEN_ANGLE` trong `config.h`); đổi nếu cửa mở ngược chiều.
+- Firmware tự đưa servo về vị trí đóng khi khởi động, nên lắp cánh tay servo **sau** khi đã cấp nguồn một lần.
+
+**Reed switch** (2 chân, không phân cực):
+- Một chân nối **GPIO 16**, chân kia nối **GND**. Không cần điện trở (firmware bật điện trở kéo lên bên trong).
+- Gắn reed switch lên khung cửa, nam châm lên cánh cửa: cửa đóng thì nam châm áp sát.
+- Lắp xong, đổi `DOOR_SENSOR_ENABLED = true` trong `config.h` rồi nạp lại. Khi chưa lắp mà bật cờ này, chân bỏ trống đọc là "cửa hở" và gây báo trộm giả.
+
+Cách hoạt động:
+- Lệnh mở (nhận diện khuôn mặt hoặc nút "Mở cửa"): servo quay 90°, giữ **5 giây**, rồi tự đóng, kể cả khi mất mạng.
+- **Cảnh báo cháy**: cửa mở và giữ mở để thoát hiểm; hết cháy 5 giây thì tự đóng.
+- **An ninh bật** mà reed switch báo cửa hở trong khi firmware không ra lệnh mở → **báo trộm** (còi + đèn phụ). Mở cửa bằng nhận diện không tắt An ninh, nên PIR vẫn báo nếu có người đi vào.
+
 ## 5. Kiểm tra trước khi cắm USB
 
 - [ ] Chỉ có một dây GND từ ESP32 vào ray `−`, và không dây GND nào cắm vào ray `+`.
 - [ ] Ray 3V3 và ray 5V không chạm nhau.
 - [ ] DHT11, LDR, MQ-2 (cách tạm thời) và còi lấy nguồn từ **3V3**.
-- [ ] PIR và relay lấy nguồn từ **5V (VIN)**.
+- [ ] PIR, relay (và servo nếu dùng cách A) lấy nguồn từ **5V (VIN)**; servo có tụ 470–1000 µF đúng cực.
 - [ ] Mỗi LED có điện trở riêng, chân dài về phía điện trở.
 - [ ] Không có chân 5 V nào nối thẳng vào GPIO.
 - [ ] Tải của relay chỉ là thiết bị 3,3–5 V.
@@ -213,8 +269,9 @@ Firmware có sẵn lệnh thử, không cần mạng.
 | MQ-2 | `sim gas on` | Còi kêu dồn dập, relay bị ngắt, `relay 1 on` báo lỗi |
 | Còi | `silence`, rồi `sim gas off` | Còi im, rồi hết cảnh báo |
 | Relay | `relay 1 on` / `relay 2 on` | Có tiếng tách, quạt/đèn chạy đúng kênh |
-| An ninh | `arm`, đợi 2 giây, vẫy tay | Còi báo trộm (chậm); hết chuyển động ~2 giây thì còi tự tắt |
+| An ninh | `arm`, đợi 2 giây, vẫy tay | Còi báo trộm (chậm), đèn phụ bật; hết chuyển động ~2 giây thì cả hai tự tắt |
 | | `disarm` | Tắt chế độ An ninh |
+| Cửa | `door open` | Servo quay sang mở, 5 giây sau tự đóng; `status` hiện trạng thái cửa |
 
 Dòng log định kỳ có dạng:
 

@@ -78,7 +78,9 @@ Dùng số GPIO in trên bo mạch, không dùng số thứ tự lỗ cắm. Ch�
 | LDR DO | GPIO 35 | 3V3 | Module LM393 chỉ có DO (không có AO); tối = HIGH; ngưỡng chỉnh bằng biến trở |
 | Còi I/O | GPIO 27 | 3V3 | Module còi kích mức thấp (LOW = kêu); cấp 5V thì GPIO không tắt được còi |
 | Relay IN1 (quạt 5 V) | GPIO 25 | 5V (VIN) | Firmware giả định kích mức thấp, chưa xác nhận trên module |
-| Relay IN2 (đèn 3,3 V) | GPIO 26 | 5V (VIN) | Như relay 1 |
+| Relay IN2 (đèn 3,3 V) | GPIO 26 | 5V (VIN) | Như relay 1; tự bật khi có báo trộm |
+| Servo cửa (SG90) | GPIO 13 | 5V (adapter riêng) | PWM 50 Hz; tụ 470 µF sát servo; 0° đóng, 90° mở |
+| Reed switch cửa | GPIO 16 | – | Nối GND, `INPUT_PULLUP`; bật `DOOR_SENSOR_ENABLED` khi đã lắp |
 
 GPIO 34 và 35 chỉ làm input và thuộc ADC1, nên đọc được analog khi Wi‑Fi chạy. Xem [tài liệu GPIO Espressif](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html). ESP32 không chịu tín hiệu logic 5 V; giới hạn phải đối chiếu [datasheet ESP32](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf?pubDate=20250709).
 
