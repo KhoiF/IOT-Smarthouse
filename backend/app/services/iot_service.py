@@ -16,7 +16,7 @@ from typing import Any, Deque, Dict, Optional, Set
 from fastapi import WebSocket
 
 from app.core.config import settings
-from app.core.rooms import ROOMS, Relay, Room
+from app.core.rooms import RELAYS, ROOMS, Relay, Room
 from app.services.smart_home_service import LightingService, get_smart_home_service
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,83 @@ class IoTService:
             "state": self._state,
             "history": list(self._history),
         }
+
+    def assistant_summary(self) -> Dict[str, Any]:
+        """Số liệu cảm biến và trạng thái thiết bị dạng dễ đọc cho trợ lý giọng nói."""
+        if self._state is None or self._last_seen is None:
+            return {"result": "error", "message": "Chưa nhận được dữ liệu nào từ ESP32"}
+
+        now = time.time()
+        state = self._state
+        sensors = state.get("sensors") or {}
+        outputs = state.get("outputs") or {}
+        alarms = state.get("alarms") or {}
+        age_seconds = round(now - self._last_seen)
+
+        if not sensors.get("mq2_ready"):
+            gas_status = "cảm biến đang khởi động"
+        elif alarms.get("gas"):
+            gas_status = "vượt ngưỡng cảnh báo"
+        else:
+            gas_status = "bình thường"
+
+        active_alarms = []
+        if alarms.get("fire"):
+            active_alarms.append(
+                "cháy: " + ("khói/gas vượt ngưỡng" if alarms.get("gas") else "nhiệt độ quá cao")
+                + (" (giả lập)" if alarms.get("gas_simulated") else "")
+            )
+        if alarms.get("intrusion"):
+            active_alarms.append("phát hiện chuyển động khi đang bật An ninh")
+
+        leds = outputs.get("leds") or {}
+        relays = outputs.get("relays") or {}
+        summary: Dict[str, Any] = {
+            "result": "success",
+            "esp32_online": self.online,
+            "data_age_seconds": age_seconds,
+            "temperature_c": sensors.get("temperature_c") if sensors.get("dht_ok") else None,
+            "humidity_percent": sensors.get("humidity_pct") if sensors.get("dht_ok") else None,
+            "temperature_sensor_ok": bool(sensors.get("dht_ok")),
+            "light": "tối" if sensors.get("is_dark") else "sáng",
+            "motion": (
+                "có chuyển động" if sensors.get("motion") else "không có chuyển động"
+            ) if sensors.get("pir_ready") else "cảm biến chuyển động đang khởi động",
+            "gas_sensor": {
+                "status": gas_status,
+                "raw_adc": sensors.get("mq2_raw"),
+                "note": "giá trị ADC tương đối của MQ-2, không phải nồng độ ppm",
+            },
+            "lights": {room.name: "bật" if leds.get(room.id) else "tắt" for room in ROOMS},
+            "devices": {relay.name: "bật" if relays.get(relay.id) else "tắt" for relay in RELAYS},
+            "security_mode": "bật" if (state.get("security") or {}).get("armed") else "tắt",
+            "active_alarms": active_alarms,
+        }
+        if not self.online or age_seconds > 30:
+            summary["warning"] = f"ESP32 không gửi dữ liệu mới, số liệu đã cũ {age_seconds} giây"
+
+        history = self._history_stats(now - 3600)
+        if history:
+            summary["last_hour"] = history
+        return summary
+
+    def _history_stats(self, since: float) -> Optional[Dict[str, Any]]:
+        points = [point for point in self._history if point["t"] >= since]
+        stats: Dict[str, Any] = {}
+        for key, label in (("temperature_c", "temperature_c"), ("humidity_pct", "humidity_percent")):
+            values = [point[key] for point in points if isinstance(point.get(key), (int, float))]
+            if values:
+                stats[label] = {
+                    "min": round(min(values), 1),
+                    "max": round(max(values), 1),
+                    "average": round(sum(values) / len(values), 1),
+                    "first": round(values[0], 1),
+                    "samples": len(values),
+                }
+        if not stats:
+            return None
+        stats["minutes_covered"] = round((time.time() - points[0]["t"]) / 60)
+        return stats
 
     def check_token(self, token: Optional[str]) -> bool:
         expected = settings.iot_device_token
