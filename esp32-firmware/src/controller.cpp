@@ -83,13 +83,15 @@ void Controller::updateAlarms(uint32_t now) {
 void Controller::updateAutomation(uint32_t now) {
   const SensorReadings& r = sensors_.readings();
 
-  // An ninh TẮT: tối + chuyển động -> bật đèn phòng khách, tắt sau 60 giây không chuyển động.
+  // An ninh TẮT: trời tối và có chuyển động -> bật đèn phòng khách; PIR hết báo chuyển động
+  // LIVING_LIGHT_OFF_DELAY_MS thì tắt. Chỉ xét LDR lúc bật: khi đèn đã sáng, ánh sáng của
+  // chính các LED có thể làm LDR báo "sáng" và làm đèn tắt dù người vẫn còn đó.
   if (armed_) {
     livingAutoOn_ = false;
   } else if (r.motion) {
     if (r.isDark) livingAutoOn_ = true;
     lastMotionAt_ = now;
-  } else if (livingAutoOn_ && now - lastMotionAt_ >= MOTION_LIGHT_HOLD_MS) {
+  } else if (livingAutoOn_ && now - lastMotionAt_ >= LIVING_LIGHT_OFF_DELAY_MS) {
     livingAutoOn_ = false;
   }
 

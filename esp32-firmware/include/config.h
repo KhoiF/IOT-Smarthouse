@@ -55,7 +55,7 @@ constexpr uint32_t MQ2_WARMUP_MS = 120000;   // chưa xét cảnh báo gas khi M
 constexpr uint32_t PIR_WARMUP_MS = 60000;    // PIR báo sai trong lúc khởi động
 constexpr uint32_t LDR_DEBOUNCE_MS = 2000;   // DO dao động khi sáng gần ngưỡng
 
-constexpr uint32_t MOTION_LIGHT_HOLD_MS = 60000;  // tắt LED phòng khách sau 60 giây không có chuyển động
+constexpr uint32_t LIVING_LIGHT_OFF_DELAY_MS = 3000;  // PIR hết báo chuyển động 3 giây thì tắt LED phòng khách
 constexpr uint32_t USER_OVERRIDE_MS = 300000;     // lệnh tay/AI giữ ưu tiên 5 phút
 constexpr uint32_t INTRUSION_CLEAR_MS = 2000;     // hết chuyển động 2 giây thì tắt còi báo trộm
 constexpr uint32_t ARM_EXIT_DELAY_MS = 2000;      // thời gian chờ sau khi bật An ninh trước khi PIR được xét
