@@ -5,6 +5,7 @@
 #include <WebSocketsClient.h>
 
 #include "controller.h"
+#include "door.h"
 #include "outputs.h"
 #include "sensors.h"
 
@@ -15,8 +16,8 @@
 // Mất mạng không ảnh hưởng logic cục bộ trong Controller.
 class ServerLink {
  public:
-  ServerLink(Controller& controller, Sensors& sensors, Outputs& outputs)
-      : controller_(controller), sensors_(sensors), outputs_(outputs) {}
+  ServerLink(Controller& controller, Sensors& sensors, Outputs& outputs, Door& door)
+      : controller_(controller), sensors_(sensors), outputs_(outputs), door_(door) {}
 
   void begin();
   void update(uint32_t now);
@@ -35,6 +36,7 @@ class ServerLink {
   Controller& controller_;
   Sensors& sensors_;
   Outputs& outputs_;
+  Door& door_;
   WebSocketsClient ws_;
 
   bool wifiConnected_ = false;

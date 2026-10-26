@@ -81,6 +81,8 @@ void Console::handleLine(char* line, uint32_t now) {
       return;
     }
     printResult(controller_.setRelayByUser(index - 1, on == 1, now));
+  } else if (strcmp(cmd, "door") == 0 && arg1 && strcmp(arg1, "open") == 0) {
+    printResult(controller_.openDoorByUser(now));
   } else if (strcmp(cmd, "arm") == 0) {
     controller_.setArmed(true, now);
   } else if (strcmp(cmd, "disarm") == 0) {
@@ -113,6 +115,7 @@ void Console::printHelp() {
   Serial.println("  log                     bat/tat dong log moi 2 giay");
   Serial.println("  led <1-5> on|off        1=phong khach 2=phong ngu 3=nha bep 4=ban cong 5=nha tam");
   Serial.println("  relay <1-2> on|off      1=quat 2=den");
+  Serial.println("  door open               mo cua (tu dong sau 5 giay)");
   Serial.println("  arm | disarm            bat/tat che do An ninh");
   Serial.println("  silence                 tat coi dang keu");
   Serial.println("  sim gas on|off          gia lap MQ-2 vuot nguong (khong can khoi that)");
@@ -145,6 +148,8 @@ void Console::printStatus(uint32_t now) {
                   controller_.overrideActive(true, i, now) ? " (lenh tay)" : "");
   }
 
+  Serial.printf("Cua       : %s%s%s\n", Door::stateName(door_.state()), door_.held() ? " (giu mo do chay)" : "",
+                DOOR_SENSOR_ENABLED ? (door_.sensorClosed() ? ", reed: dong" : ", reed: HO") : ", reed: chua lap");
   Serial.printf("An ninh    : %s%s\n", controller_.armed() ? "BAT" : "tat",
                 controller_.armingPending(now) ? " (dang cho roi khu vuc)" : "");
   Serial.printf("Canh bao   : chay=%s (gas=%s%s, nhiet=%s) trom=%s%s\n",

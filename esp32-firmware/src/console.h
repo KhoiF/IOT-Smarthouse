@@ -3,14 +3,15 @@
 #include <Arduino.h>
 
 #include "controller.h"
+#include "door.h"
 #include "outputs.h"
 #include "sensors.h"
 
 // Lệnh qua Serial Monitor để thử phần cứng khi chưa có mạng. Gõ `help` để xem lệnh.
 class Console {
  public:
-  Console(Controller& controller, Sensors& sensors, Outputs& outputs)
-      : controller_(controller), sensors_(sensors), outputs_(outputs) {}
+  Console(Controller& controller, Sensors& sensors, Outputs& outputs, Door& door)
+      : controller_(controller), sensors_(sensors), outputs_(outputs), door_(door) {}
 
   void begin();
   void update(uint32_t now);
@@ -25,6 +26,7 @@ class Console {
   Controller& controller_;
   Sensors& sensors_;
   Outputs& outputs_;
+  Door& door_;
 
   char buffer_[64] = {};
   uint8_t length_ = 0;

@@ -122,6 +122,35 @@ class Settings:
     iot_history_size: int = field(
         default_factory=lambda: max(10, _env_int("IOT_HISTORY_SIZE", 720))
     )
+    face_detector_model: Path = field(
+        default_factory=lambda: _env_path(
+            "FACE_DETECTOR_MODEL", Path("models") / "face_detection_yunet_2023mar.onnx"
+        )
+    )
+    face_recognizer_model: Path = field(
+        default_factory=lambda: _env_path(
+            "FACE_RECOGNIZER_MODEL", Path("models") / "face_recognition_sface_2021dec.onnx"
+        )
+    )
+    face_data_directory: Path = field(
+        default_factory=lambda: _env_path("FACE_DATA_DIRECTORY", Path("data") / "faces")
+    )
+    # Ngưỡng cosine mặc định của SFace; tăng lên để khắt khe hơn.
+    face_match_threshold: float = field(
+        default_factory=lambda: _env_float("FACE_MATCH_THRESHOLD", 0.363)
+    )
+    face_confirm_frames: int = field(
+        default_factory=lambda: max(1, _env_int("FACE_CONFIRM_FRAMES", 3))
+    )
+    face_confirm_window_seconds: float = field(
+        default_factory=lambda: max(0.5, _env_float("FACE_CONFIRM_WINDOW_SECONDS", 2.0))
+    )
+    door_open_cooldown_seconds: float = field(
+        default_factory=lambda: max(0.0, _env_float("DOOR_OPEN_COOLDOWN_SECONDS", 10.0))
+    )
+    door_log_file: Path = field(
+        default_factory=lambda: _env_path("DOOR_LOG_FILE", Path("data") / "door_log.json")
+    )
     default_lights: tuple[tuple[str, bool], ...] = field(
         default_factory=lambda: (
             ("Phòng khách", True),

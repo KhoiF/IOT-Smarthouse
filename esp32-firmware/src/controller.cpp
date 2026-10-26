@@ -21,6 +21,18 @@ void Controller::update(uint32_t now) {
   updateAlarms(now);
   updateAutomation(now);
   applyBuzzer();
+
+  if (door_.state() != lastDoorState_) {
+    lastDoorState_ = door_.state();
+    changed_ = true;
+  }
+}
+
+CommandResult Controller::openDoorByUser(uint32_t now) {
+  door_.open(now);
+  changed_ = true;
+  event("Mo cua theo lenh");
+  return CommandResult::Ok;
 }
 
 void Controller::updateAlarms(uint32_t now) {
@@ -46,11 +58,14 @@ void Controller::updateAlarms(uint32_t now) {
 
   if (fireAlarm() && !wasFire) {
     fireSilenced_ = false;
-    event(gasAlarm_ ? "CANH BAO CHAY: MQ-2 vuot nguong" : "CANH BAO CHAY: nhiet do cao");
+    event(gasAlarm_ ? "CANH BAO CHAY: MQ-2 vuot nguong, mo cua thoat hiem"
+                    : "CANH BAO CHAY: nhiet do cao, mo cua thoat hiem");
   } else if (!fireAlarm() && wasFire) {
     fireSilenced_ = false;
     event("Het canh bao chay");
   }
+  // Cháy: mở và giữ cửa mở để thoát hiểm; hết cháy thì cửa tự đóng sau DOOR_OPEN_MS.
+  door_.setHold(fireAlarm(), now);
 
   // Ngắt cầu dao mô phỏng: cắt cả hai relay và bỏ lệnh tay đang giữ.
   if (fireAlarm()) {
@@ -63,18 +78,24 @@ void Controller::updateAlarms(uint32_t now) {
     }
   }
 
-  // Báo trộm chỉ kéo dài khi còn chuyển động; hết chuyển động INTRUSION_CLEAR_MS thì tự tắt.
-  if (armed_ && timeReached(now, armActiveAt_) && r.motion) {
+  // Cửa bị mở trái phép: servo đang ở vị trí đóng một lúc mà reed switch vẫn báo hở.
+  // Mở cửa bằng lệnh hợp lệ (nhận diện, nút trên app) không tính, nhưng An ninh vẫn giữ nên PIR vẫn báo.
+  const bool doorForced = !door_.sensorClosed() && door_.closedFor(now) >= DOOR_FORCED_GRACE_MS;
+
+  // Báo trộm chỉ kéo dài khi còn chuyển động / cửa còn hở; hết INTRUSION_CLEAR_MS thì tự tắt.
+  if (armed_ && timeReached(now, armActiveAt_) && (r.motion || doorForced)) {
     lastIntrusionMotionAt_ = now;
     if (!intrusionAlarm_) {
       intrusionAlarm_ = true;
       intrusionSilenced_ = false;
+      doorForced_ = doorForced;
       changed_ = true;
-      event("CANH BAO TROM: phat hien chuyen dong");
+      event(doorForced ? "CANH BAO TROM: cua bi mo trai phep" : "CANH BAO TROM: phat hien chuyen dong");
     }
   } else if (intrusionAlarm_ && now - lastIntrusionMotionAt_ >= INTRUSION_CLEAR_MS) {
     intrusionAlarm_ = false;
     intrusionSilenced_ = false;
+    doorForced_ = false;
     changed_ = true;
     event("Het chuyen dong, tat bao trom");
   }

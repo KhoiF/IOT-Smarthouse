@@ -22,11 +22,18 @@ export interface IotSecurity {
   arming: boolean;
 }
 
+export interface IotDoor {
+  state: "closed" | "opening" | "open" | "closing";
+  held_by_fire: boolean;
+  sensor_closed: boolean | null;
+}
+
 export interface IotAlarms {
   fire: boolean;
   gas: boolean;
   heat: boolean;
   intrusion: boolean;
+  door_forced?: boolean;
   silenced: boolean;
   gas_simulated: boolean;
 }
@@ -38,6 +45,7 @@ export interface IotDeviceState {
   outputs: IotOutputs;
   security: IotSecurity;
   alarms: IotAlarms;
+  door?: IotDoor;
 }
 
 export interface IotDeviceInfo {
