@@ -120,28 +120,42 @@ class GeminiService:
             await self._run_offline_loop(websocket)
             return
 
-        config = self._create_live_config(previous_session_handle)
-
         send_task = receive_task = ping_task = None
         fallback_message: Optional[Dict[str, Any]] = None
         try:
-            async with self.client.aio.live.connect(model=self.model, config=config) as session:
-                send_task = asyncio.create_task(
-                    self._relay_client_to_gemini(websocket, session)
-                )
-                receive_task = asyncio.create_task(
-                    self._relay_gemini_to_client(websocket, session)
-                )
-                ping_task = asyncio.create_task(self._ping_websocket(websocket))
+            # Handle cũ có thể hết hạn hoặc phiên cũ vẫn còn mở phía Gemini; khi nối lại thất bại
+            # thì mở phiên mới thay vì rơi vào chế độ ngoại tuyến.
+            handles = [previous_session_handle, None] if previous_session_handle else [None]
+            for handle in handles:
+                connected = False
+                try:
+                    config = self._create_live_config(handle)
+                    async with self.client.aio.live.connect(model=self.model, config=config) as session:
+                        connected = True
+                        send_task = asyncio.create_task(
+                            self._relay_client_to_gemini(websocket, session)
+                        )
+                        receive_task = asyncio.create_task(
+                            self._relay_gemini_to_client(websocket, session)
+                        )
+                        ping_task = asyncio.create_task(self._ping_websocket(websocket))
 
-                done, pending = await asyncio.wait(
-                    [send_task, receive_task, ping_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in pending:
-                    task.cancel()
-                for task in done:
-                    task.result()
+                        done, pending = await asyncio.wait(
+                            [send_task, receive_task, ping_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for task in pending:
+                            task.cancel()
+                        for task in done:
+                            task.result()
+                    break
+                except WebSocketDisconnect:
+                    raise
+                except Exception as exc:  # pylint: disable=broad-except
+                    if connected or handle is None:
+                        raise
+                    logger.warning("Không nối lại được phiên Gemini cũ (%s), mở phiên mới", exc)
+                    self._latest_session_handle = None
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected by client")
         except TimeoutError as exc:
