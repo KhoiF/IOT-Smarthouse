@@ -37,6 +37,8 @@ class GeminiService:
     NGAY LẬP TỨC trước khi trả lời họ. Các tool bạn có thể sử dụng:
     - turn_on_light: bật đèn ở một phòng (Phòng khách, Phòng ngủ, Nhà bếp, Ban công, Nhà tắm)
     - turn_off_light: tắt đèn ở một phòng trong danh sách trên
+    - enable_security_mode: bật chế độ An ninh chống trộm
+    - get_home_status: đọc số liệu cảm biến và trạng thái thiết bị trong nhà
     - play_music: phát bài hát gần giống nhất với tên được yêu cầu
     - pause_music: tạm dừng bài hát đang phát
     - continue_music: tiếp tục phát bài hát đã tạm dừng
@@ -49,6 +51,14 @@ class GeminiService:
     5. Nếu người dùng yêu cầu bật lại nhạc đã tạm dừng, hãy gọi tool continue_music.
     6. Đèn được điều khiển qua thiết bị ESP32 thật. Nếu tool trả về result = "error",
        hãy nói rõ lệnh chưa thực hiện được và đọc lại lý do trong "message"; không được nói đã bật/tắt.
+    7. Khi người dùng hỏi về nhiệt độ, độ ẩm, trời sáng hay tối, có ai trong nhà/có chuyển động không,
+       khói/gas, đèn hay thiết bị nào đang bật, chế độ An ninh hoặc có cảnh báo gì, hãy gọi
+       get_home_status rồi trả lời đúng theo số liệu trả về, kèm đơn vị (°C, %). Không tự đoán số liệu.
+       Nếu kết quả có "warning" hoặc esp32_online = false, nói rõ số liệu có thể đã cũ.
+       Giá trị MQ-2 chỉ là mức tương đối, không quy đổi thành ppm.
+    8. Khi người dùng muốn bật chế độ An ninh / chống trộm / báo động, gọi enable_security_mode.
+       Vì lý do an toàn, KHÔNG thể tắt chế độ An ninh bằng giọng nói: nếu được yêu cầu tắt,
+       hãy từ chối lịch sự và hướng dẫn tắt bằng công tắc "Chế độ An ninh" trên ứng dụng.
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -120,28 +130,42 @@ class GeminiService:
             await self._run_offline_loop(websocket)
             return
 
-        config = self._create_live_config(previous_session_handle)
-
         send_task = receive_task = ping_task = None
         fallback_message: Optional[Dict[str, Any]] = None
         try:
-            async with self.client.aio.live.connect(model=self.model, config=config) as session:
-                send_task = asyncio.create_task(
-                    self._relay_client_to_gemini(websocket, session)
-                )
-                receive_task = asyncio.create_task(
-                    self._relay_gemini_to_client(websocket, session)
-                )
-                ping_task = asyncio.create_task(self._ping_websocket(websocket))
+            # Handle cũ có thể hết hạn hoặc phiên cũ vẫn còn mở phía Gemini; khi nối lại thất bại
+            # thì mở phiên mới thay vì rơi vào chế độ ngoại tuyến.
+            handles = [previous_session_handle, None] if previous_session_handle else [None]
+            for handle in handles:
+                connected = False
+                try:
+                    config = self._create_live_config(handle)
+                    async with self.client.aio.live.connect(model=self.model, config=config) as session:
+                        connected = True
+                        send_task = asyncio.create_task(
+                            self._relay_client_to_gemini(websocket, session)
+                        )
+                        receive_task = asyncio.create_task(
+                            self._relay_gemini_to_client(websocket, session)
+                        )
+                        ping_task = asyncio.create_task(self._ping_websocket(websocket))
 
-                done, pending = await asyncio.wait(
-                    [send_task, receive_task, ping_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in pending:
-                    task.cancel()
-                for task in done:
-                    task.result()
+                        done, pending = await asyncio.wait(
+                            [send_task, receive_task, ping_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for task in pending:
+                            task.cancel()
+                        for task in done:
+                            task.result()
+                    break
+                except WebSocketDisconnect:
+                    raise
+                except Exception as exc:  # pylint: disable=broad-except
+                    if connected or handle is None:
+                        raise
+                    logger.warning("Không nối lại được phiên Gemini cũ (%s), mở phiên mới", exc)
+                    self._latest_session_handle = None
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected by client")
         except TimeoutError as exc:
@@ -584,6 +608,20 @@ class GeminiService:
             return {"result": "error", "location": room.name, "message": error.message}
         return {"result": "success", "location": room.name, "state": "on" if turn_on else "off"}
 
+    async def _enable_security_mode(self) -> Dict[str, Any]:
+        """Chỉ cho phép BẬT An ninh bằng giọng nói; tắt phải làm trên ứng dụng."""
+        try:
+            snapshot = await get_iot_service().set_armed(True)
+        except IoTError as error:
+            return {"result": "error", "message": error.message}
+        security = (snapshot.get("state") or {}).get("security") or {}
+        if not security.get("armed"):
+            return {"result": "error", "message": "ESP32 chưa bật được chế độ An ninh"}
+        return {
+            "result": "success",
+            "message": "Đã bật chế độ An ninh. Sau 2 giây, cảm biến chuyển động sẽ hú còi khi phát hiện người.",
+        }
+
     async def _handle_tool_calls(self, websocket: WebSocket, session, tool_call) -> None:
         if not getattr(tool_call, "function_calls", None):
             return
@@ -592,6 +630,7 @@ class GeminiService:
         for function_call in tool_call.function_calls:
             name = function_call.name
             args = getattr(function_call, "args", {}) or {}
+            logger.info("🔧 Gemini gọi tool %s %s", name, dict(args))
 
             if name in ("turn_on_light", "turn_off_light"):
                 location = args.get("location", "")
@@ -740,6 +779,24 @@ class GeminiService:
                         response=payload,
                     )
                 )
+            elif name == "enable_security_mode":
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response=await self._enable_security_mode(),
+                    )
+                )
+
+            elif name == "get_home_status":
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response=get_iot_service().assistant_summary(),
+                    )
+                )
+
             else:
                 responses.append(
                     types.FunctionResponse(
@@ -749,6 +806,8 @@ class GeminiService:
                     )
                 )
 
+        for response in responses:
+            logger.info("🔧 Kết quả tool %s: %s", response.name, response.response)
         if session and responses:
             await session.send_tool_response(function_responses=responses)
 
@@ -797,6 +856,31 @@ class GeminiService:
                                     }
                                 },
                                 "required": ["location"],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="enable_security_mode",
+                            description=(
+                                "Bật chế độ An ninh chống trộm: cảm biến chuyển động sẽ hú còi khi phát hiện người. "
+                                "Không có chức năng tắt An ninh bằng giọng nói."
+                            ),
+                            parameters={
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="get_home_status",
+                            description=(
+                                "Đọc số liệu mới nhất từ cảm biến trong nhà (nhiệt độ, độ ẩm, sáng/tối, "
+                                "chuyển động, khói/gas MQ-2), trạng thái đèn, quạt, đèn phụ, chế độ An ninh, "
+                                "cảnh báo đang có và thống kê nhiệt độ/độ ẩm trong 1 giờ gần nhất"
+                            ),
+                            parameters={
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
                             },
                         ),
                         types.FunctionDeclaration(

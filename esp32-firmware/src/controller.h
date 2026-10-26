@@ -14,6 +14,7 @@ enum class CommandResult : uint8_t { Ok, InvalidTarget, BlockedByFire };
 // - An ninh BẬT: PIR phát hiện chuyển động -> báo trộm, hết chuyển động thì còi tự tắt.
 // - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, hết chuyển động thì tắt.
 // - Trời tối -> bật LED ban công. Nhiệt độ cao -> bật quạt (relay 1).
+// - Báo trộm bắt đầu/kết thúc -> bật/tắt đèn phụ (relay 2).
 // - Lệnh tay/AI trên đầu ra tự động giữ ưu tiên USER_OVERRIDE_MS hoặc tới khi cảm biến đổi trạng thái.
 class Controller {
  public:
@@ -77,6 +78,7 @@ class Controller {
   bool livingAutoOn_ = false;
   uint32_t lastMotionAt_ = 0;
   bool fanAutoOn_ = false;
+  bool alarmLightOn_ = false;
 
   Override ledOverrides_[LED_COUNT];
   Override relayOverrides_[RELAY_COUNT];

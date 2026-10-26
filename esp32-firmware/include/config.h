@@ -24,6 +24,7 @@ constexpr uint8_t LED_BAN_CONG = 3;
 constexpr uint8_t RELAY_COUNT = 2;
 constexpr uint8_t RELAY_PINS[RELAY_COUNT] = {25, 26};
 constexpr uint8_t RELAY_FAN = 0;
+constexpr uint8_t RELAY_ALARM_LIGHT = 1;  // đèn phụ: bật khi có báo trộm
 // Phần lớn module relay kích mức thấp. Đổi thành false nếu relay đóng khi IN = HIGH.
 constexpr bool RELAY_ACTIVE_LOW = true;
 

@@ -100,6 +100,15 @@ void Controller::updateAutomation(uint32_t now) {
     if (fanAutoOn_ && r.temperatureC <= FAN_OFF_C) fanAutoOn_ = false;
   }
 
+  // Đèn phụ chỉ phản ứng lúc báo trộm bắt đầu/kết thúc; ngoài lúc đó giữ theo lệnh tay.
+  if (intrusionAlarm_ != alarmLightOn_) {
+    alarmLightOn_ = intrusionAlarm_;
+    if (!fireAlarm() && outputs_.relay(RELAY_ALARM_LIGHT) != alarmLightOn_) {
+      outputs_.setRelay(RELAY_ALARM_LIGHT, alarmLightOn_);
+      changed_ = true;
+    }
+  }
+
   applyAutomated(false, LED_PHONG_KHACH, livingAutoOn_, now);
   applyAutomated(false, LED_BAN_CONG, r.isDark, now);
   if (!fireAlarm()) applyAutomated(true, RELAY_FAN, fanAutoOn_, now);
