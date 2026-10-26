@@ -61,41 +61,43 @@ Người dùng cho biết đã mua các linh kiện sau. Phiên bản cụ thể
 - PIR được đặt giả định ở khu vực Phòng khách. LDR dùng làm ngưỡng sáng/tối chung cho tự động hóa PIR.
 - MQ-2 và camera/OpenCV là hai đường phát hiện khác nhau: MQ-2 đo phản ứng khói/gas của cảm biến, còn OpenCV phân tích ảnh camera. Không gộp chúng thành một phép đo hoặc coi MQ-2 là thiết bị báo cháy đạt chuẩn.
 
-## 4. Sơ đồ chân ESP32 mặc định
+## 4. Sơ đồ chân ESP32 (đã đấu và thử trên mạch)
 
-Dùng số GPIO in trên bo mạch, không dùng số thứ tự lỗ cắm. Tránh đổi chân nếu chưa cập nhật cả sơ đồ, firmware và cẩm nang.
+Dùng số GPIO in trên bo mạch, không dùng số thứ tự lỗ cắm. Chân, mức kích và ngưỡng trong firmware nằm ở `esp32-firmware/include/config.h`; đổi chân thì phải sửa đồng thời mạch, `config.h` và tài liệu. Hướng dẫn đấu từng bước, cách thử và lỗi thường gặp: [HUONG_DAN_DAU_NOI.md](HUONG_DAN_DAU_NOI.md).
 
-| Chức năng | Chân ESP32 | Ghi chú |
-|---|---:|---|
-| LED Phòng khách | GPIO 18 | Nối tiếp điện trở 220–330 Ω |
-| LED Phòng ngủ | GPIO 19 | Nối tiếp điện trở 220–330 Ω |
-| LED Nhà bếp | GPIO 21 | Nối tiếp điện trở 220–330 Ω |
-| LED Ban công | GPIO 22 | Nối tiếp điện trở 220–330 Ω |
-| LED Nhà tắm | GPIO 23 | Nối tiếp điện trở 220–330 Ω |
-| DHT11 DATA | GPIO 32 | Cấp nguồn theo thông số module; bảo đảm mức DATA không vượt ngưỡng ESP32 |
-| PIR OUT | GPIO 33 | Đo mức OUT thực tế trước khi nối |
-| MQ-2 AO | GPIO 34 | Chân input-only, ADC1; bắt buộc kiểm tra/chia áp mức analog |
-| LDR AO | GPIO 35 | Chân input-only, ADC1; đầu ra phải nằm trong dải an toàn |
-| Buzzer control | GPIO 27 | Dùng transistor/MOSFET nếu buzzer cần 5 V hoặc dòng vượt khả năng GPIO |
-| Relay IN1 | GPIO 25 | Chỉ dùng module nhận mức điều khiển 3.3 V; xác định active-high/active-low |
-| Relay IN2 | GPIO 26 | Chỉ dùng module nhận mức điều khiển 3.3 V; xác định active-high/active-low |
+| Chức năng | Chân ESP32 | Nguồn module | Ghi chú |
+|---|---:|---|---|
+| LED Phòng khách | GPIO 18 | – | Nối tiếp điện trở 220–330 Ω |
+| LED Phòng ngủ | GPIO 19 | – | Nối tiếp điện trở 220–330 Ω |
+| LED Nhà bếp | GPIO 21 | – | Nối tiếp điện trở 220–330 Ω |
+| LED Ban công | GPIO 22 | – | Nối tiếp điện trở 220–330 Ω |
+| LED Nhà tắm | GPIO 23 | – | Nối tiếp điện trở 220–330 Ω |
+| DHT11 DATA | GPIO 32 | 3V3 | Cấp 3V3 để mức DATA không vượt ngưỡng ESP32 |
+| PIR OUT | GPIO 33 | 5V (VIN) | OUT là chân giữa; module không in nhãn chân, xác định GND trước khi cấp nguồn |
+| MQ-2 AO | GPIO 34 | 3V3 (tạm thời) | Đang nối thẳng AO vì cấp 3V3; chuyển sang 5V thì bắt buộc chia áp 10 kΩ + 10 kΩ |
+| LDR DO | GPIO 35 | 3V3 | Module LM393 chỉ có DO (không có AO); tối = HIGH; ngưỡng chỉnh bằng biến trở |
+| Còi I/O | GPIO 27 | 3V3 | Module còi kích mức thấp (LOW = kêu); cấp 5V thì GPIO không tắt được còi |
+| Relay IN1 (quạt 5 V) | GPIO 25 | 5V (VIN) | Firmware giả định kích mức thấp, chưa xác nhận trên module |
+| Relay IN2 (đèn 3,3 V) | GPIO 26 | 5V (VIN) | Như relay 1 |
 
-GPIO 34 và 35 chỉ làm input; chúng thuộc ADC1 nên phù hợp để lấy tín hiệu analog khi Wi‑Fi chạy. Xem [tài liệu GPIO Espressif](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html). ESP32 không phải thiết bị chịu tín hiệu logic 5 V; giới hạn phải đối chiếu [datasheet ESP32](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf?pubDate=20250709).
+GPIO 34 và 35 chỉ làm input và thuộc ADC1, nên đọc được analog khi Wi‑Fi chạy. Xem [tài liệu GPIO Espressif](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html). ESP32 không chịu tín hiệu logic 5 V; giới hạn phải đối chiếu [datasheet ESP32](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf?pubDate=20250709).
 
 ## 5. Đấu nối và quy tắc nguồn
 
 Đấu mạch khi đã ngắt USB/adapter. Trước khi cấp nguồn, kiểm tra lại cực tính, chân GPIO và đường GND.
 
-1. **LED:** mỗi GPIO LED → điện trở 220–330 Ω → anode LED (chân dài); cathode (chân ngắn) → GND. Không nối LED trần trực tiếp vào GPIO.
-2. **DHT11:** nối VCC, GND, DATA vào nguồn/chân phù hợp với sơ đồ module. Nếu module chạy 5 V, xác minh DATA có kéo lên 5 V hay không; không đưa mức đó vào ESP32 nếu chưa chuyển mức.
-3. **PIR HC-SR501:** nối VCC, GND, OUT; GPIO33 đọc OUT. Đợi cảm biến ổn định sau khi cấp nguồn và kiểm tra điện áp OUT.
-4. **MQ-2:** module thường cần nguồn 5 V cho heater. Dùng AO cho phép đo analog; đo AO bằng đồng hồ trước. Nếu AO có thể vượt ngưỡng GPIO, lắp chia áp phù hợp (ví dụ hai điện trở 10 kΩ tạo tỉ lệ 1/2 khi đầu vào tối đa 5 V) rồi đo lại trước khi nối GPIO34. Bộ điện trở 220–330 Ω trong danh sách chỉ dùng cho LED, không thay thế bộ chia áp này. Chỉ coi giá trị đọc là mức tương đối sau warm-up/hiệu chuẩn, không quy đổi tùy tiện thành ppm.
-5. **LDR:** nối AO tới GPIO35 chỉ sau khi xác nhận điện áp cực đại an toàn. Nếu dùng mạch quang trở tự ráp, dùng bộ chia điện áp với nguồn 3.3 V và GND chung.
-6. **Buzzer:** buzzer active phát âm khi được cấp đúng điện áp/cực tính. Với buzzer 5 V hoặc loại tiêu thụ dòng lớn, GPIO27 chỉ điều khiển transistor/MOSFET; không cấp buzzer từ chân GPIO.
-7. **Relay:** cấp nguồn cuộn relay theo nhãn module, IN1/IN2 lần lượt tới GPIO25/26. Kiểm tra module thật sự kích được bằng logic 3.3 V; nhiều board relay có logic 5 V hoặc active-low. Tải thử chỉ là quạt/đèn USB 5 V. Không đưa điện lưới 220 V vào mô hình này.
-8. **Nguồn:** cấp ESP32 qua USB. Dùng adapter 5 V riêng cho module/tải khi cần và đủ dòng; không nối chập hai nguồn 5 V. Nếu các mạch dùng chung GND, nối GND chung theo sơ đồ. Chỉ duy trì cách ly điện nếu relay/module và sơ đồ cách ly được thiết kế đúng.
+Breadboard dùng ba đường nguồn: ray `−` nối GND của ESP32 (một dây duy nhất), ray `+` một phía nối chân `3V3`, ray `+` phía còn lại nối chân `VIN` (5 V khi cắm USB). Hai ray `+` không được chạm nhau.
 
-**Có thể cần mua thêm:** hai điện trở chia áp có giá trị thích hợp cho AO MQ-2 (nếu module xuất tới 5 V), transistor/MOSFET và điện trở base/gate cho buzzer 5 V, hoặc mạch chuyển mức nếu DHT/PIR/relay đưa ra tín hiệu không tương thích. Không dùng trực tiếp bộ điện trở 220–330 Ω làm chia áp tín hiệu.
+1. **LED:** mỗi GPIO LED → điện trở 220–330 Ω → anode LED (chân dài); cathode (chân ngắn) → GND. Không nối LED trần trực tiếp vào GPIO.
+2. **DHT11:** VCC → 3V3, GND → GND, DATA → GPIO32. Module 3 chân đã có điện trở kéo lên.
+3. **PIR HC-SR501:** VCC → 5V (VIN), GND → GND, OUT (chân giữa) → GPIO33. Xác định chân GND bằng thông mạch tới cực âm tụ hóa trên module trước khi cấp nguồn. Đợi 30–60 giây sau khi cấp nguồn; vặn biến trở thời gian giữ về thấp nhất.
+4. **MQ-2:** hiện cấp 3V3 và nối AO thẳng vào GPIO34 (AO không thể vượt 3,3 V). Cuộn nung thiếu điện áp nên cảm biến kém nhạy và ngưỡng chưa hiệu chuẩn. Cách đúng khi có điện trở: VCC → 5V, AO qua bộ chia 10 kΩ + 10 kΩ, đo điểm giữa dưới 3,3 V rồi mới nối GPIO34. Bộ điện trở 220–330 Ω chỉ dùng cho LED, không thay thế bộ chia áp này. Chỉ coi giá trị đọc là mức tương đối sau warm-up/hiệu chuẩn, không quy đổi thành ppm.
+5. **LDR:** module 3 chân VCC → 3V3, GND → GND, DO → GPIO35. Chỉ cho biết tối/sáng; tối thì DO = HIGH. Không cấp 5 V khi DO đang nối GPIO.
+6. **Còi:** module 3 chân VCC → 3V3, GND → GND, I/O → GPIO27. Không cấp 5 V cho module: khi đó mức HIGH 3,3 V không tắt được transistor bên trong.
+7. **Relay:** VCC → 5V (VIN), GND → GND, IN1/IN2 → GPIO25/26, giữ nguyên jumper `JD-VCC`. Phía tải dùng `COM` + `NO`: relay 1 đóng/cắt quạt 5 V, relay 2 đóng/cắt đèn 3,3 V (mỗi kênh một mạch). Không đưa điện lưới 220 V vào mô hình này.
+8. **Nguồn:** cấp ESP32 qua USB. Nếu quạt làm ESP32 reset, cấp quạt bằng adapter 5 V riêng; nối GND adapter với GND ESP32, không nối chập hai nguồn 5 V.
+
+**Còn thiếu:** hai điện trở 10 kΩ để chạy MQ-2 ở 5 V đúng thông số. Đồng hồ vạn năng giúp đo mức OUT của PIR và AO của MQ-2 trước khi nối GPIO.
 
 ## 6. Luồng dữ liệu đích
 
