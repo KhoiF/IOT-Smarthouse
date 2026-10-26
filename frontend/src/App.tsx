@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
 
-import { LightControlCard } from "@/components/LightControlCard";
+import { DeviceControlCard } from "@/components/DeviceControlCard";
 import { GeminiChatCard } from "@/components/GeminiChatCard";
 import { MusicControlCard } from "@/components/MusicControlCard";
+import { SensorCard } from "@/components/SensorCard";
 import { GEMINI_MAX_IMAGE_SIZE, useGeminiRealtime } from "@/hooks/useGeminiRealtime";
-import { useLights } from "@/hooks/useLights";
+import { useIot } from "@/hooks/useIot";
 import { useMusicController } from "@/hooks/useMusicController";
 import { cn } from "@/lib/utils";
 
@@ -20,9 +21,11 @@ export default function App() {
     setFeedback({ message, isError });
   }, []);
 
-  const { lights, lightLocation, setLightLocation, handleLightAction, applyLightUpdate } = useLights({
-    showFeedback
-  });
+  const { device, deviceState, history, pending, isStreamConnected, setLed, setRelay, setArmed, silenceAlarm } =
+    useIot({ showFeedback });
+
+  // Trạng thái đèn đến từ luồng /ws/iot/updates sau khi ESP32 xác nhận, kể cả lệnh từ Gemini.
+  const handleGeminiLightUpdate = useCallback(() => undefined, []);
 
   const {
     musicState,
@@ -68,7 +71,7 @@ export default function App() {
     cameraDimensions
   } = useGeminiRealtime({
     showFeedback,
-    onLightUpdate: applyLightUpdate,
+    onLightUpdate: handleGeminiLightUpdate,
     beginMusicPlayback,
     pauseCurrentMusic,
     resumeCurrentMusic
@@ -80,17 +83,33 @@ export default function App() {
         <header className="space-y-2 text-center">
           <h1 className="text-3xl font-bold sm:text-4xl">Điều khiển Nhà Thông Minh</h1>
           <p className="text-muted-foreground">
-            Kiểm thử nhanh các chức năng đèn và phát nhạc của backend FastAPI.
+            Giám sát cảm biến và điều khiển thiết bị trên mô hình qua ESP32.
           </p>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <LightControlCard
-            lights={lights}
-            lightLocation={lightLocation}
-            onLightLocationChange={setLightLocation}
-            onLightAction={handleLightAction}
+          <DeviceControlCard
+            device={device}
+            deviceState={deviceState}
+            pending={pending}
+            isStreamConnected={isStreamConnected}
+            onSetLed={(roomId, on) => {
+              void setLed(roomId, on);
+            }}
+            onSetRelay={(relayId, on) => {
+              void setRelay(relayId, on);
+            }}
+            onSetArmed={(armed) => {
+              void setArmed(armed);
+            }}
+            onSilenceAlarm={() => {
+              void silenceAlarm();
+            }}
           />
+          <SensorCard device={device} deviceState={deviceState} history={history} />
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
           <MusicControlCard
             musicState={musicState}
             liveMusicPosition={liveMusicPosition}

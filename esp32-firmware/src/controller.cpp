@@ -1,0 +1,216 @@
+#include "controller.h"
+
+namespace {
+
+bool timeReached(uint32_t now, uint32_t at) { return (int32_t)(now - at) >= 0; }
+
+constexpr const char* PREFS_NAMESPACE = "smarthome";
+constexpr const char* PREFS_ARMED = "armed";
+
+}  // namespace
+
+void Controller::begin(uint32_t now) {
+  prefs_.begin(PREFS_NAMESPACE, false);
+  // Giữ trạng thái An ninh qua lần khởi động lại (mất điện, reset).
+  armed_ = prefs_.getBool(PREFS_ARMED, false);
+  armActiveAt_ = now + ARM_EXIT_DELAY_MS;
+  if (armed_) event("An ninh dang BAT (khoi phuc sau khoi dong)");
+}
+
+void Controller::update(uint32_t now) {
+  updateAlarms(now);
+  updateAutomation(now);
+  applyBuzzer();
+}
+
+void Controller::updateAlarms(uint32_t now) {
+  const SensorReadings& r = sensors_.readings();
+
+  // MQ-2 có hysteresis để còi không bật/tắt liên tục quanh ngưỡng.
+  if (r.mq2Ready) {
+    if (!mq2Alarm_ && r.mq2Raw >= MQ2_ALARM_ON) mq2Alarm_ = true;
+    if (mq2Alarm_ && r.mq2Raw <= MQ2_ALARM_OFF) mq2Alarm_ = false;
+  }
+  const bool gas = mq2Alarm_ || simulatedGas_;
+
+  bool heat = heatAlarm_;
+  if (r.dhtOk) {
+    if (!heat && r.temperatureC >= TEMP_FIRE_ON_C) heat = true;
+    if (heat && r.temperatureC <= TEMP_FIRE_OFF_C) heat = false;
+  }
+
+  const bool wasFire = fireAlarm();
+  if (gas != gasAlarm_ || heat != heatAlarm_) changed_ = true;
+  gasAlarm_ = gas;
+  heatAlarm_ = heat;
+
+  if (fireAlarm() && !wasFire) {
+    fireSilenced_ = false;
+    event(gasAlarm_ ? "CANH BAO CHAY: MQ-2 vuot nguong" : "CANH BAO CHAY: nhiet do cao");
+  } else if (!fireAlarm() && wasFire) {
+    fireSilenced_ = false;
+    event("Het canh bao chay");
+  }
+
+  // Ngắt cầu dao mô phỏng: cắt cả hai relay và bỏ lệnh tay đang giữ.
+  if (fireAlarm()) {
+    for (uint8_t i = 0; i < RELAY_COUNT; i++) {
+      relayOverrides_[i].active = false;
+      if (outputs_.relay(i)) {
+        outputs_.setRelay(i, false);
+        changed_ = true;
+      }
+    }
+  }
+
+  // Báo trộm chỉ kéo dài khi còn chuyển động; hết chuyển động INTRUSION_CLEAR_MS thì tự tắt.
+  if (armed_ && timeReached(now, armActiveAt_) && r.motion) {
+    lastIntrusionMotionAt_ = now;
+    if (!intrusionAlarm_) {
+      intrusionAlarm_ = true;
+      intrusionSilenced_ = false;
+      changed_ = true;
+      event("CANH BAO TROM: phat hien chuyen dong");
+    }
+  } else if (intrusionAlarm_ && now - lastIntrusionMotionAt_ >= INTRUSION_CLEAR_MS) {
+    intrusionAlarm_ = false;
+    intrusionSilenced_ = false;
+    changed_ = true;
+    event("Het chuyen dong, tat bao trom");
+  }
+}
+
+void Controller::updateAutomation(uint32_t now) {
+  const SensorReadings& r = sensors_.readings();
+
+  // An ninh TẮT: tối + chuyển động -> bật đèn phòng khách, tắt sau 60 giây không chuyển động.
+  if (armed_) {
+    livingAutoOn_ = false;
+  } else if (r.motion) {
+    if (r.isDark) livingAutoOn_ = true;
+    lastMotionAt_ = now;
+  } else if (livingAutoOn_ && now - lastMotionAt_ >= MOTION_LIGHT_HOLD_MS) {
+    livingAutoOn_ = false;
+  }
+
+  if (r.dhtOk) {
+    if (!fanAutoOn_ && r.temperatureC >= FAN_ON_C) fanAutoOn_ = true;
+    if (fanAutoOn_ && r.temperatureC <= FAN_OFF_C) fanAutoOn_ = false;
+  }
+
+  applyAutomated(false, LED_PHONG_KHACH, livingAutoOn_, now);
+  applyAutomated(false, LED_BAN_CONG, r.isDark, now);
+  if (!fireAlarm()) applyAutomated(true, RELAY_FAN, fanAutoOn_, now);
+}
+
+void Controller::applyAutomated(bool isRelay, uint8_t index, bool autoValue, uint32_t now) {
+  Override& o = isRelay ? relayOverrides_[index] : ledOverrides_[index];
+  if (o.active && timeReached(now, o.until)) o.active = false;
+
+  // Cảm biến đổi trạng thái (sáng/tối, vượt ngưỡng...) thì tự động hóa lấy lại quyền ngay,
+  // lệnh tay chỉ giữ ưu tiên khi môi trường chưa thay đổi.
+  bool& lastAuto = isRelay ? relayLastAuto_[index] : ledLastAuto_[index];
+  if (autoValue != lastAuto) {
+    lastAuto = autoValue;
+    o.active = false;
+  }
+
+  const bool target = o.active ? o.value : autoValue;
+  const bool current = isRelay ? outputs_.relay(index) : outputs_.led(index);
+  if (target == current) return;
+
+  if (isRelay) {
+    outputs_.setRelay(index, target);
+  } else {
+    outputs_.setLed(index, target);
+  }
+  changed_ = true;
+}
+
+void Controller::applyBuzzer() {
+  BuzzerPattern pattern = BuzzerPattern::Off;
+  if (fireAlarm() && !fireSilenced_) {
+    pattern = BuzzerPattern::Fire;
+  } else if (intrusionAlarm_ && !intrusionSilenced_) {
+    pattern = BuzzerPattern::Intrusion;
+  }
+  if (pattern != outputs_.buzzerPattern()) {
+    outputs_.setBuzzerPattern(pattern);
+    changed_ = true;
+  }
+}
+
+CommandResult Controller::setLedByUser(uint8_t index, bool on, uint32_t now) {
+  if (index >= LED_COUNT) return CommandResult::InvalidTarget;
+  if (isAutomatedLed(index)) setOverride(ledOverrides_[index], on, now);
+  if (outputs_.led(index) != on) changed_ = true;
+  outputs_.setLed(index, on);
+  return CommandResult::Ok;
+}
+
+CommandResult Controller::setRelayByUser(uint8_t index, bool on, uint32_t now) {
+  if (index >= RELAY_COUNT) return CommandResult::InvalidTarget;
+  if (on && fireAlarm()) return CommandResult::BlockedByFire;
+  if (index == RELAY_FAN) setOverride(relayOverrides_[index], on, now);
+  if (outputs_.relay(index) != on) changed_ = true;
+  outputs_.setRelay(index, on);
+  return CommandResult::Ok;
+}
+
+void Controller::setArmed(bool armed, uint32_t now) {
+  if (armed == armed_) return;
+  armed_ = armed;
+  prefs_.putBool(PREFS_ARMED, armed_);
+  changed_ = true;
+
+  if (armed_) {
+    armActiveAt_ = now + ARM_EXIT_DELAY_MS;
+    event("An ninh BAT (cho thoi gian roi khoi khu vuc)");
+  } else {
+    intrusionAlarm_ = false;
+    intrusionSilenced_ = false;
+    event("An ninh TAT");
+  }
+}
+
+void Controller::silenceAlarm() {
+  // Chỉ tắt còi; trạng thái cảnh báo vẫn giữ để ứng dụng hiển thị.
+  if (fireAlarm()) fireSilenced_ = true;
+  if (intrusionAlarm_) intrusionSilenced_ = true;
+  changed_ = true;
+}
+
+void Controller::simulateGas(bool active) {
+  simulatedGas_ = active;
+  changed_ = true;
+}
+
+void Controller::setOverride(Override& o, bool value, uint32_t now) {
+  o.active = true;
+  o.value = value;
+  o.until = now + USER_OVERRIDE_MS;
+}
+
+bool Controller::armingPending(uint32_t now) const {
+  return armed_ && !timeReached(now, armActiveAt_);
+}
+
+bool Controller::alarmSilenced() const {
+  return (fireAlarm() && fireSilenced_) || (intrusionAlarm_ && intrusionSilenced_);
+}
+
+bool Controller::overrideActive(bool isRelay, uint8_t index, uint32_t now) const {
+  const Override& o = isRelay ? relayOverrides_[index] : ledOverrides_[index];
+  return o.active && !timeReached(now, o.until);
+}
+
+bool Controller::consumeChanged() {
+  const bool changed = changed_;
+  changed_ = false;
+  return changed;
+}
+
+void Controller::event(const char* message) {
+  Serial.print("[SU KIEN] ");
+  Serial.println(message);
+}

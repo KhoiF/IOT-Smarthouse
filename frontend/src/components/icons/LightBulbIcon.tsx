@@ -2,14 +2,15 @@ import { cn } from "@/lib/utils";
 
 interface LightBulbIconProps {
   isOn: boolean;
+  className?: string;
 }
 
-export const LightBulbIcon = ({ isOn }: LightBulbIconProps) => (
+export const LightBulbIcon = ({ isOn, className }: LightBulbIconProps) => (
   <svg
     viewBox="0 0 64 64"
     role="img"
     aria-hidden="true"
-    className={cn("light-bulb-icon", isOn ? "light-bulb-icon--on" : "light-bulb-icon--off")}
+    className={cn("light-bulb-icon", isOn ? "light-bulb-icon--on" : "light-bulb-icon--off", className)}
   >
     <path
       className="light-bulb-glass"
