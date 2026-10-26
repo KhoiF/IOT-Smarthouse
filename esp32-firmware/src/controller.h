@@ -12,7 +12,7 @@ enum class CommandResult : uint8_t { Ok, InvalidTarget, BlockedByFire };
 // Logic chạy cục bộ trên ESP32, không phụ thuộc mạng:
 // - Cháy (MQ-2 hoặc nhiệt độ): còi kiểu Fire, ngắt cả hai relay.
 // - An ninh BẬT: PIR phát hiện chuyển động -> báo trộm, hết chuyển động thì còi tự tắt.
-// - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, tắt sau 60 giây.
+// - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, hết chuyển động thì tắt.
 // - Trời tối -> bật LED ban công. Nhiệt độ cao -> bật quạt (relay 1).
 // - Lệnh tay/AI trên đầu ra tự động giữ ưu tiên USER_OVERRIDE_MS hoặc tới khi cảm biến đổi trạng thái.
 class Controller {
