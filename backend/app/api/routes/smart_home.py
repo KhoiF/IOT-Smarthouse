@@ -7,12 +7,15 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, confloat, constr
 
+from app.core.rooms import find_room
+from app.services.iot_service import IoTError, get_iot_service
 from app.services.smart_home_service import LightState, MusicPlaybackState, get_smart_home_service
 
 
 router = APIRouter(prefix="/smart-home", tags=["smart-home"])
 
 smart_home_service = get_smart_home_service()
+iot_service = get_iot_service()
 
 
 class LightRequest(BaseModel):
@@ -73,16 +76,27 @@ def get_light(location: str) -> LightResponse:
     return LightResponse(**_serialize_light(state))
 
 
-@router.post("/lights/on", response_model=LightResponse)
-def turn_on_light(payload: LightRequest) -> LightResponse:
-    state = smart_home_service.turn_on_light(payload.location)
+async def _set_light(location: str, turn_on: bool) -> LightResponse:
+    # Lệnh đi qua ESP32; trạng thái chỉ đổi khi thiết bị ACK.
+    room = find_room(location)
+    if room is None:
+        raise HTTPException(status_code=404, detail=f"Không có đèn ở '{location}'")
+    try:
+        await iot_service.set_led(room, turn_on)
+    except IoTError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+    state = smart_home_service.lighting_service.get_light_state(room.name)
     return LightResponse(**_serialize_light(state))
+
+
+@router.post("/lights/on", response_model=LightResponse)
+async def turn_on_light(payload: LightRequest) -> LightResponse:
+    return await _set_light(payload.location, True)
 
 
 @router.post("/lights/off", response_model=LightResponse)
-def turn_off_light(payload: LightRequest) -> LightResponse:
-    state = smart_home_service.turn_off_light(payload.location)
-    return LightResponse(**_serialize_light(state))
+async def turn_off_light(payload: LightRequest) -> LightResponse:
+    return await _set_light(payload.location, False)
 
 
 @router.get("/music/library", response_model=List[str])

@@ -110,6 +110,18 @@ class Settings:
             "FIRE_ALERT_AUDIO_FILE", Path("data") / "fire_alert_audio.b64"
         )
     )
+    iot_device_token: Optional[str] = field(
+        default_factory=lambda: _env_str("IOT_DEVICE_TOKEN", None) or None
+    )
+    iot_ack_timeout_seconds: float = field(
+        default_factory=lambda: max(0.5, _env_float("IOT_ACK_TIMEOUT_SECONDS", 3.0))
+    )
+    iot_history_interval_seconds: float = field(
+        default_factory=lambda: max(1.0, _env_float("IOT_HISTORY_INTERVAL_SECONDS", 5.0))
+    )
+    iot_history_size: int = field(
+        default_factory=lambda: max(10, _env_int("IOT_HISTORY_SIZE", 720))
+    )
     default_lights: tuple[tuple[str, bool], ...] = field(
         default_factory=lambda: (
             ("Phòng khách", True),

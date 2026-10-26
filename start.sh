@@ -13,10 +13,14 @@ echo ""
 
 # Start Backend (Uvicorn)
 echo -e "${GREEN}[1/2] Starting Backend Server (Uvicorn)...${NC}"
-echo -e "${YELLOW}Running: uvicorn app.main:create_app --reload --host 0.0.0.0 --port 8000${NC}"
+echo -e "${YELLOW}Running: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000${NC}"
 echo ""
 cd backend
-uvicorn app.main:create_app --reload --host 0.0.0.0 --port 8000 &
+# Dùng venv của backend nếu có (backend/.venv)
+UVICORN=uvicorn
+[ -x .venv/bin/uvicorn ] && UVICORN=.venv/bin/uvicorn
+# WebSocket của ESP32/web giữ kết nối lâu; không giới hạn thì --reload bị kẹt khi tắt.
+$UVICORN app.main:app --reload --timeout-graceful-shutdown 2 --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN}✓ Backend started with PID: $BACKEND_PID${NC}"
 echo ""

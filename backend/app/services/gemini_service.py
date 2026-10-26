@@ -17,7 +17,9 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
+from app.core.rooms import ROOMS, find_room
 from app.services.fire_detection_service import FireDetectionService
+from app.services.iot_service import IoTError, get_iot_service
 from app.services.notification_voice_service import NotificationVoiceService
 from app.services.session_service import SessionService
 from app.services.smart_home_service import SmartHomeService, get_smart_home_service
@@ -33,8 +35,8 @@ class GeminiService:
     thân thiện và sử dụng tiếng Việt. Bạn có thể nhận yêu cầu bằng giọng nói, văn bản hoặc
     hình ảnh. Khi người dùng yêu cầu thao tác với thiết bị trong nhà, hãy GỌI TOOL phù hợp
     NGAY LẬP TỨC trước khi trả lời họ. Các tool bạn có thể sử dụng:
-    - turn_on_light: bật đèn ở một vị trí bất kỳ
-    - turn_off_light: tắt đèn ở một vị trí bất kỳ
+    - turn_on_light: bật đèn ở một phòng (Phòng khách, Phòng ngủ, Nhà bếp, Ban công, Nhà tắm)
+    - turn_off_light: tắt đèn ở một phòng trong danh sách trên
     - play_music: phát bài hát gần giống nhất với tên được yêu cầu
     - pause_music: tạm dừng bài hát đang phát
     - continue_music: tiếp tục phát bài hát đã tạm dừng
@@ -45,6 +47,8 @@ class GeminiService:
     3. Nếu người dùng muốn nghe nhạc, hãy gọi tool play_music và truyền tên bài hát họ nêu ra.
     4. Nếu người dùng yêu cầu tạm dừng nhạc, hãy gọi tool pause_music.
     5. Nếu người dùng yêu cầu bật lại nhạc đã tạm dừng, hãy gọi tool continue_music.
+    6. Đèn được điều khiển qua thiết bị ESP32 thật. Nếu tool trả về result = "error",
+       hãy nói rõ lệnh chưa thực hiện được và đọc lại lý do trong "message"; không được nói đã bật/tắt.
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -564,6 +568,22 @@ class GeminiService:
     # ------------------------------------------------------------------
     # Tool handling
     # ------------------------------------------------------------------
+    async def _set_light_via_device(self, location: str, turn_on: bool) -> Dict[str, Any]:
+        """Bật/tắt LED qua ESP32 và trả kết quả thật cho Gemini (không báo success khi chưa ACK)."""
+        room = find_room(location)
+        if room is None:
+            return {
+                "result": "error",
+                "location": location,
+                "message": "Không có đèn ở vị trí này. Các phòng có đèn: "
+                + ", ".join(r.name for r in ROOMS),
+            }
+        try:
+            await get_iot_service().set_led(room, turn_on)
+        except IoTError as error:
+            return {"result": "error", "location": room.name, "message": error.message}
+        return {"result": "success", "location": room.name, "state": "on" if turn_on else "off"}
+
     async def _handle_tool_calls(self, websocket: WebSocket, session, tool_call) -> None:
         if not getattr(tool_call, "function_calls", None):
             return
@@ -573,50 +593,21 @@ class GeminiService:
             name = function_call.name
             args = getattr(function_call, "args", {}) or {}
 
-            if name == "turn_on_light":
+            if name in ("turn_on_light", "turn_off_light"):
                 location = args.get("location", "")
-                state = self.smart_home_service.turn_on_light(location)
-                await self._send_safely(
-                    websocket,
-                    {
-                        "type": "smart_home_light_update",
-                        "location": state.location,
-                        "is_on": state.is_on,
-                    },
-                )
-                responses.append(
-                    types.FunctionResponse(
-                        id=function_call.id,
-                        name=name,
-                        response={
-                            "result": "success",
-                            "location": state.location,
-                            "state": "on",
+                turn_on = name == "turn_on_light"
+                result = await self._set_light_via_device(location, turn_on)
+                if result["result"] == "success":
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "smart_home_light_update",
+                            "location": result["location"],
+                            "is_on": turn_on,
                         },
                     )
-                )
-
-            elif name == "turn_off_light":
-                location = args.get("location", "")
-                state = self.smart_home_service.turn_off_light(location)
-                await self._send_safely(
-                    websocket,
-                    {
-                        "type": "smart_home_light_update",
-                        "location": state.location,
-                        "is_on": state.is_on,
-                    },
-                )
                 responses.append(
-                    types.FunctionResponse(
-                        id=function_call.id,
-                        name=name,
-                        response={
-                            "result": "success",
-                            "location": state.location,
-                            "state": "off",
-                        },
-                    )
+                    types.FunctionResponse(id=function_call.id, name=name, response=result)
                 )
 
             elif name == "play_music":

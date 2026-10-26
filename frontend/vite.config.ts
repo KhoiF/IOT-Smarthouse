@@ -21,6 +21,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true
       },
+      "/iot": {
+        target: backendTarget,
+        changeOrigin: true
+      },
       "/ws": {
         target: backendTarget,
         changeOrigin: true,

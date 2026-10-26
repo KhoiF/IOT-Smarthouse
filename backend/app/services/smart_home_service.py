@@ -69,16 +69,14 @@ class LightingService:
         else:
             logger.warning("Unexpected light state format; recreating defaults")
 
-        if not states:
-            states = self._default_states()
+        # Chỉ giữ các phòng có LED thật trên ESP32, theo thứ tự cấu hình.
+        defaults = self._default_states()
+        self._states = {
+            key: LightState(location=default.location, is_on=states[key].is_on if key in states else default.is_on)
+            for key, default in defaults.items()
+        }
+        if set(states) != set(defaults):
             self._persist()
-        else:
-            # ensure stable ordering by the display name
-            sorted_items = sorted(states.items(), key=lambda item: item[1].location.lower())
-            self._states = dict(sorted_items)
-            return
-
-        self._states = states
 
     def _persist(self) -> None:
         with self.storage_path.open("w", encoding="utf-8") as file:
