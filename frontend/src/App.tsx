@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { DeviceControlCard } from "@/components/DeviceControlCard";
+import { DoorCard } from "@/components/DoorCard";
 import { GeminiChatCard } from "@/components/GeminiChatCard";
 import { MusicControlCard } from "@/components/MusicControlCard";
 import { SensorCard } from "@/components/SensorCard";
@@ -110,6 +111,7 @@ export default function App() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          <DoorCard device={device} deviceState={deviceState} showFeedback={showFeedback} />
           <MusicControlCard
             musicState={musicState}
             liveMusicPosition={liveMusicPosition}

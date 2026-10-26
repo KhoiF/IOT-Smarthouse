@@ -36,6 +36,21 @@ constexpr uint8_t PIN_BUZZER = 27;
 constexpr bool BUZZER_ACTIVE_LOW = true;
 
 // ---------------------------------------------------------------------------
+// Cửa: servo SG90 (GPIO13) + reed switch (GPIO16 nối GND)
+// ---------------------------------------------------------------------------
+constexpr uint8_t PIN_DOOR_SERVO = 13;
+constexpr uint8_t PIN_DOOR_SENSOR = 16;      // INPUT_PULLUP: nam châm sát (cửa đóng) = LOW
+// Bật khi đã lắp reed switch; chân bỏ trống sẽ đọc HIGH (cửa mở) và gây báo trộm giả.
+constexpr bool DOOR_SENSOR_ENABLED = false;
+constexpr uint8_t DOOR_CLOSED_ANGLE = 0;
+constexpr uint8_t DOOR_OPEN_ANGLE = 90;
+constexpr uint32_t DOOR_OPEN_MS = 5000;      // tự đóng sau 5 giây
+constexpr uint32_t DOOR_MOVE_MS = 700;       // thời gian servo quay xong, sau đó ngắt xung
+constexpr uint32_t DOOR_FORCED_GRACE_MS = 1500;  // cửa đã đóng mà reed vẫn hở quá lâu mới tính là bị mở
+constexpr uint16_t SERVO_MIN_US = 500;       // xung ứng với 0°
+constexpr uint16_t SERVO_MAX_US = 2400;      // xung ứng với 180°
+
+// ---------------------------------------------------------------------------
 // Cảm biến
 // ---------------------------------------------------------------------------
 constexpr uint8_t PIN_DHT = 32;

@@ -207,6 +207,8 @@ void ServerLink::handleCommand(const uint8_t* payload, size_t length) {
     } else {
       error = "bad_request";
     }
+  } else if (strcmp(action, "open_door") == 0) {
+    error = errorCode(controller_.openDoorByUser(now));
   } else if (strcmp(action, "silence") == 0) {
     controller_.silenceAlarm();
   } else {
@@ -285,11 +287,21 @@ void ServerLink::fillState(JsonObject state) {
   security["armed"] = controller_.armed();
   security["arming"] = controller_.armingPending(now);
 
+  JsonObject door = state["door"].to<JsonObject>();
+  door["state"] = Door::stateName(door_.state());
+  door["held_by_fire"] = door_.held();
+  if (DOOR_SENSOR_ENABLED) {
+    door["sensor_closed"] = door_.sensorClosed();
+  } else {
+    door["sensor_closed"] = nullptr;
+  }
+
   JsonObject alarms = state["alarms"].to<JsonObject>();
   alarms["fire"] = controller_.fireAlarm();
   alarms["gas"] = controller_.gasAlarm();
   alarms["heat"] = controller_.heatAlarm();
   alarms["intrusion"] = controller_.intrusionAlarm();
+  alarms["door_forced"] = controller_.doorForced();
   alarms["silenced"] = controller_.alarmSilenced();
   alarms["gas_simulated"] = controller_.gasSimulated();
 }

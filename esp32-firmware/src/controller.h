@@ -4,6 +4,7 @@
 #include <Preferences.h>
 
 #include "config.h"
+#include "door.h"
 #include "outputs.h"
 #include "sensors.h"
 
@@ -15,16 +16,19 @@ enum class CommandResult : uint8_t { Ok, InvalidTarget, BlockedByFire };
 // - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, hết chuyển động thì tắt.
 // - Trời tối -> bật LED ban công. Nhiệt độ cao -> bật quạt (relay 1).
 // - Báo trộm bắt đầu/kết thúc -> bật/tắt đèn phụ (relay 2).
+// - Cửa: mở theo lệnh và tự đóng; cháy -> mở để thoát hiểm; cửa bị mở trái phép khi An ninh bật -> báo trộm.
 // - Lệnh tay/AI trên đầu ra tự động giữ ưu tiên USER_OVERRIDE_MS hoặc tới khi cảm biến đổi trạng thái.
 class Controller {
  public:
-  Controller(Sensors& sensors, Outputs& outputs) : sensors_(sensors), outputs_(outputs) {}
+  Controller(Sensors& sensors, Outputs& outputs, Door& door)
+      : sensors_(sensors), outputs_(outputs), door_(door) {}
 
   void begin(uint32_t now);
   void update(uint32_t now);
 
   CommandResult setLedByUser(uint8_t index, bool on, uint32_t now);
   CommandResult setRelayByUser(uint8_t index, bool on, uint32_t now);
+  CommandResult openDoorByUser(uint32_t now);
   void setArmed(bool armed, uint32_t now);
   void silenceAlarm();
   void simulateGas(bool active);
@@ -35,6 +39,7 @@ class Controller {
   bool gasAlarm() const { return gasAlarm_; }
   bool heatAlarm() const { return heatAlarm_; }
   bool intrusionAlarm() const { return intrusionAlarm_; }
+  bool doorForced() const { return doorForced_; }
   bool alarmSilenced() const;
   bool gasSimulated() const { return simulatedGas_; }
   bool overrideActive(bool isRelay, uint8_t index, uint32_t now) const;
@@ -61,6 +66,7 @@ class Controller {
 
   Sensors& sensors_;
   Outputs& outputs_;
+  Door& door_;
   Preferences prefs_;
 
   bool armed_ = false;
@@ -74,6 +80,8 @@ class Controller {
   bool intrusionAlarm_ = false;
   bool intrusionSilenced_ = false;
   uint32_t lastIntrusionMotionAt_ = 0;
+  bool doorForced_ = false;
+  DoorState lastDoorState_ = DoorState::Closed;
 
   bool livingAutoOn_ = false;
   uint32_t lastMotionAt_ = 0;

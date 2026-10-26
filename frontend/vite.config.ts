@@ -25,6 +25,14 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true
       },
+      "/face": {
+        target: backendTarget,
+        changeOrigin: true
+      },
+      "/door": {
+        target: backendTarget,
+        changeOrigin: true
+      },
       "/ws": {
         target: backendTarget,
         changeOrigin: true,

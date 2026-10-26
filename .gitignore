@@ -89,3 +89,8 @@ downloads/
 
 CLAUDE.md
 Báo Cáo_ Hệ Thống Nhà Thông Minh (Smart Home) Hoàn Chỉnh.docx
+
+# Mô hình nhận diện khuôn mặt (tải bằng script) và dữ liệu khuôn mặt/nhật ký cửa (dữ liệu cá nhân)
+backend/models/
+backend/data/faces/
+backend/data/door_log.json

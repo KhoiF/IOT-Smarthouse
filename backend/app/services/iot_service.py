@@ -50,6 +50,7 @@ class CommandRejectedError(IoTError):
     _MESSAGES = {
         "blocked_by_fire": "Đang có cảnh báo cháy, không thể bật relay",
         "invalid_target": "Thiết bị không hợp lệ",
+        "door_disabled": "ESP32 chưa bật chức năng cửa",
         "unknown_action": "ESP32 không hiểu lệnh",
         "bad_request": "Lệnh gửi tới ESP32 không hợp lệ",
     }
@@ -122,7 +123,11 @@ class IoTService:
                 + (" (giả lập)" if alarms.get("gas_simulated") else "")
             )
         if alarms.get("intrusion"):
-            active_alarms.append("phát hiện chuyển động khi đang bật An ninh")
+            active_alarms.append(
+                "cửa bị mở trái phép khi đang bật An ninh"
+                if alarms.get("door_forced")
+                else "phát hiện chuyển động khi đang bật An ninh"
+            )
 
         leds = outputs.get("leds") or {}
         relays = outputs.get("relays") or {}
@@ -145,6 +150,9 @@ class IoTService:
             "lights": {room.name: "bật" if leds.get(room.id) else "tắt" for room in ROOMS},
             "devices": {relay.name: "bật" if relays.get(relay.id) else "tắt" for relay in RELAYS},
             "security_mode": "bật" if (state.get("security") or {}).get("armed") else "tắt",
+            "door": {
+                "closed": "đóng", "opening": "đang mở", "open": "mở", "closing": "đang đóng"
+            }.get((state.get("door") or {}).get("state"), "không rõ"),
             "active_alarms": active_alarms,
         }
         if not self.online or age_seconds > 30:
@@ -279,6 +287,9 @@ class IoTService:
 
     async def silence_alarm(self) -> Dict[str, Any]:
         return await self._send_command("silence")
+
+    async def open_door(self) -> Dict[str, Any]:
+        return await self._send_command("open_door")
 
     async def _send_command(self, action: str, **params: Any) -> Dict[str, Any]:
         websocket = self._device_ws

@@ -19,6 +19,7 @@ from google.genai import types
 from app.core.config import settings
 from app.core.rooms import ROOMS, find_room
 from app.services.fire_detection_service import FireDetectionService
+from app.services.door_service import get_door_service
 from app.services.iot_service import IoTError, get_iot_service
 from app.services.notification_voice_service import NotificationVoiceService
 from app.services.session_service import SessionService
@@ -59,6 +60,9 @@ class GeminiService:
     8. Khi người dùng muốn bật chế độ An ninh / chống trộm / báo động, gọi enable_security_mode.
        Vì lý do an toàn, KHÔNG thể tắt chế độ An ninh bằng giọng nói: nếu được yêu cầu tắt,
        hãy từ chối lịch sự và hướng dẫn tắt bằng công tắc "Chế độ An ninh" trên ứng dụng.
+    9. Cửa ra vào chỉ mở bằng nhận diện khuôn mặt hoặc nút "Mở cửa" trên ứng dụng. KHÔNG thể mở cửa
+       bằng giọng nói: nếu được yêu cầu, từ chối lịch sự và hướng dẫn dùng ứng dụng. Câu hỏi như
+       "ai vừa về", "cửa đang mở không" thì gọi get_home_status (trường door và last_door_event).
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -608,6 +612,13 @@ class GeminiService:
             return {"result": "error", "location": room.name, "message": error.message}
         return {"result": "success", "location": room.name, "state": "on" if turn_on else "off"}
 
+    @staticmethod
+    def _home_status() -> Dict[str, Any]:
+        summary = get_iot_service().assistant_summary()
+        if summary.get("result") == "success":
+            summary["last_door_event"] = get_door_service().last_event_summary()
+        return summary
+
     async def _enable_security_mode(self) -> Dict[str, Any]:
         """Chỉ cho phép BẬT An ninh bằng giọng nói; tắt phải làm trên ứng dụng."""
         try:
@@ -793,7 +804,7 @@ class GeminiService:
                     types.FunctionResponse(
                         id=function_call.id,
                         name=name,
-                        response=get_iot_service().assistant_summary(),
+                        response=self._home_status(),
                     )
                 )
 
@@ -874,8 +885,8 @@ class GeminiService:
                             name="get_home_status",
                             description=(
                                 "Đọc số liệu mới nhất từ cảm biến trong nhà (nhiệt độ, độ ẩm, sáng/tối, "
-                                "chuyển động, khói/gas MQ-2), trạng thái đèn, quạt, đèn phụ, chế độ An ninh, "
-                                "cảnh báo đang có và thống kê nhiệt độ/độ ẩm trong 1 giờ gần nhất"
+                                "chuyển động, khói/gas MQ-2), trạng thái đèn, quạt, đèn phụ, cửa ra vào, chế độ An ninh, "
+                                "cảnh báo đang có, lần mở cửa/người đến gần nhất và thống kê nhiệt độ/độ ẩm trong 1 giờ"
                             ),
                             parameters={
                                 "type": "object",
