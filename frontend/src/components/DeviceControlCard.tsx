@@ -53,7 +53,7 @@ export function DeviceControlCard({
               <p className="text-sm text-foreground">
                 {alarms.fire
                   ? `${alarms.gas ? "Cảm biến khói/gas vượt ngưỡng" : "Nhiệt độ quá cao"}${alarms.gas_simulated ? " (giả lập)" : ""}. Đã ngắt quạt và đèn phụ.`
-                  : "Cảm biến chuyển động phát hiện người khi đang bật An ninh."}
+                  : "Cảm biến chuyển động phát hiện người khi đang bật An ninh. Đã bật đèn phụ."}
               </p>
               {alarms.silenced && <p className="text-xs text-muted-foreground">Đã tắt còi, cảnh báo vẫn còn hiệu lực.</p>}
             </div>
