@@ -15,12 +15,12 @@ ESP32 nói chuyện trực tiếp với backend bằng HTTP và WebSocket trong 
 | **Tự động hóa** | Trời tối → bật đèn Ban công; tối + có người (An ninh tắt) → bật đèn Phòng khách, hết chuyển động 3 giây thì tắt; nóng ≥ 33 °C → bật quạt. Lệnh tay giữ ưu tiên tới khi cảm biến đổi trạng thái (tối đa 5 phút) |
 | **Cửa ra vào** | Nhận diện khuôn mặt thành viên (OpenCV) để mở cửa; nút Mở/Đóng cửa trên Web; mở cửa hợp lệ tự tắt An ninh; cảnh báo "cửa chưa đóng hẳn" khi có cảm biến cửa |
 | **Trợ lý giọng nói** | Gemini Live tiếng Việt: bật/tắt đèn, phát/tạm dừng/tiếp tục nhạc, bật An ninh, đóng cửa, hỏi nhiệt độ/độ ẩm/trạng thái nhà. **Không** cho tắt An ninh hoặc mở cửa bằng giọng nói |
-| **Khác** | Phát nhạc từ thư viện `backend/music`, phát hiện lửa qua ảnh camera (OpenCV), app Android (đèn, nhạc, chat) |
+| **Khác** | Phát nhạc từ thư viện `backend/music`, phát hiện lửa qua ảnh camera (OpenCV), app iOS (giám sát/điều khiển, cửa, nhạc, trợ lý Gemini) |
 
 ## Kiến trúc
 
 ```
- Web (React) / Android ──REST + WebSocket──►  FastAPI (backend/)  ◄──HTTP telemetry + WebSocket lệnh/ACK──  ESP32 (esp32-firmware/)
+ Web (React) / iOS ─────REST + WebSocket──►  FastAPI (backend/)  ◄──HTTP telemetry + WebSocket lệnh/ACK──  ESP32 (esp32-firmware/)
         │  micro, camera                      │  iot_service: trạng thái thiết bị, chờ ACK         │  cảm biến: DHT11, PIR, LDR, MQ-2
         └──── /ws/gemini ───────────────────► │  gemini_service: trợ lý giọng nói + tool           │  đầu ra: 5 LED, 2 relay, còi, servo cửa
                                               │  face_service / door_service: nhận diện, mở cửa    │  logic cục bộ: cháy, An ninh, tự động hóa
@@ -31,7 +31,7 @@ ESP32 nói chuyện trực tiếp với backend bằng HTTP và WebSocket trong 
 backend/          FastAPI: app/api/routes (API), app/services (logic), app/core (cấu hình, danh sách phòng)
 frontend/         Web React + Vite + Tailwind
 esp32-firmware/   Firmware PlatformIO (Arduino framework); pin map và ngưỡng ở include/config.h
-android-app/      App Android (Kotlin, Jetpack Compose)
+ios-app/          App iOS (SwiftUI, iOS 17+)
 HUONG_DAN_DAU_NOI.md      Hướng dẫn đấu dây từng thiết bị, thử bằng Serial, lỗi thường gặp
 IOT_COMPLETION_GUIDE.md   Cẩm nang dự án: phần cứng, pin map, hợp đồng API, lộ trình
 ```
@@ -157,14 +157,22 @@ docker compose up --build    # backend :8000, web (nginx) :5173
 
 Image backend sao chép cả thư mục `backend/`, nên cần có sẵn `backend/.env` và mô hình khuôn mặt trong `backend/models/` trước khi build. Khi chạy trong Docker, ESP32 vẫn trỏ `BACKEND_HOST` tới IP LAN của máy host.
 
-## App Android
+## App iOS
 
-```bash
-cd android-app
-./gradlew assembleDebug -PAPP_API_BASE_URL=http://<IP-LAN>:8000 -PAPP_WS_BASE_URL=ws://<IP-LAN>:8000
-```
+Cần máy Mac có Xcode 16 trở lên; app chạy trên iOS 17+.
 
-App Android hiện có các màn hình chat Gemini, đèn và nhạc; các chức năng mới (cảm biến, An ninh, relay, cửa) mới có trên Web.
+1. Mở `ios-app/SmartHome.xcodeproj` bằng Xcode.
+2. Target **SmartHome** → *Signing & Capabilities*: chọn Team (Apple ID miễn phí cũng được) và đổi *Bundle Identifier* thành giá trị riêng nếu Xcode báo trùng.
+3. Chọn iPhone thật hoặc Simulator rồi bấm Run.
+4. Mở tab **Cài đặt**, nhập địa chỉ backend `http://<IP-LAN>:8000` (Simulator dùng được `localhost:8000`) rồi bấm *Lưu và kết nối*. iPhone phải cùng mạng Wi‑Fi với máy chạy backend và cho phép quyền *Mạng cục bộ* khi được hỏi.
+
+Các tab:
+
+- **Nhà**: trạng thái ESP32, cảm biến và biểu đồ lịch sử, cảnh báo cháy/xâm nhập + tắt còi, chế độ An ninh, 5 đèn, 2 relay, mở/đóng cửa. Lệnh chỉ hiển thị là xong khi ESP32 ACK (giống Web).
+- **Trợ lý AI**: Gemini Live qua `/ws/gemini` – nhắn tin, nói chuyện bằng micro, chụp ảnh gửi Gemini.
+- **Nhạc**: điều khiển nhạc phát trên máy chủ (phát theo tên/thư viện, tạm dừng, tiếp tục, tua).
+
+Nhận diện khuôn mặt và quản lý thành viên vẫn chỉ có trên Web.
 
 ## Cấu hình firmware
 

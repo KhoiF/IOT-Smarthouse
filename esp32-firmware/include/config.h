@@ -8,7 +8,7 @@
 constexpr const char* FIRMWARE_VERSION = "0.1.0";
 
 // ---------------------------------------------------------------------------
-// LED: thứ tự là thứ tự phòng, id dùng chung với backend/web/Android.
+// LED: thứ tự là thứ tự phòng, id dùng chung với backend/web/iOS.
 // ---------------------------------------------------------------------------
 constexpr uint8_t LED_COUNT = 5;
 constexpr uint8_t LED_PINS[LED_COUNT] = {18, 19, 21, 22, 23};

@@ -4,7 +4,7 @@
 
 ## 1. Mục tiêu và phạm vi
 
-Hoàn thiện mô hình nhà thông minh dùng ESP32 DevKit V1 làm node thiết bị, backend FastAPI làm máy chủ trung tâm, giao diện web React và ứng dụng Android làm bộ điều khiển. ESP32 đọc cảm biến và điều khiển 5 LED, 2 ngõ relay và buzzer. Backend nhận telemetry, đưa trạng thái tới các ứng dụng và gửi lệnh về ESP32.
+Hoàn thiện mô hình nhà thông minh dùng ESP32 DevKit V1 làm node thiết bị, backend FastAPI làm máy chủ trung tâm, giao diện web React và ứng dụng iOS làm bộ điều khiển. ESP32 đọc cảm biến và điều khiển 5 LED, 2 ngõ relay và buzzer. Backend nhận telemetry, đưa trạng thái tới các ứng dụng và gửi lệnh về ESP32.
 
 Giao tiếp mặc định là HTTP và WebSocket trực tiếp với FastAPI; không thêm MQTT broker. Firmware mới nằm trong thư mục `esp32-firmware/` và được quản lý bằng PlatformIO.
 
@@ -14,10 +14,10 @@ Giao tiếp mặc định là HTTP và WebSocket trực tiếp với FastAPI; kh
 
 - Backend FastAPI khởi tạo tại `backend/app/main.py`; API đèn và nhạc nằm tại `backend/app/api/routes/smart_home.py`.
 - Web React có màn hình điều khiển đèn, nhạc và Gemini trong `frontend/src/`.
-- Android app có các màn hình chat, đèn và nhạc trong `android-app/app/src/main/`.
+- App iOS (SwiftUI) trong `ios-app/` thay cho app Android cũ: tab Nhà (telemetry, An ninh, LED, relay, cửa qua `/iot/*`, `/door/*`), Trợ lý AI (`/ws/gemini`) và Nhạc.
 - Trạng thái đèn được ghi vào JSON. Backend phát snapshot và cập nhật qua WebSocket `/smart-home/lights/stream`.
 - Thư viện nhạc đọc từ `backend/music`; backend cung cấp file qua HTTP stream. Web phát file bằng audio element.
-- Chat Gemini Live dùng `/ws/gemini`. Web có thể gửi camera liên tục từ thiết bị chạy trình duyệt; Android hiện chụp/gửi ảnh trong màn hình chat.
+- Chat Gemini Live dùng `/ws/gemini`. Web có thể gửi camera liên tục từ thiết bị chạy trình duyệt; app iOS chụp/gửi ảnh trong tab Trợ lý AI.
 - Nhận diện cháy bằng ảnh dùng OpenCV trong `backend/app/utils/fire_detection.py`. Gemini cần `GOOGLE_API_KEY`; thiếu key thì WebSocket chạy chế độ ngoại tuyến hạn chế.
 - Cấu hình ban đầu có 5 vị trí đèn: `Phòng khách`, `Phòng ngủ`, `Nhà bếp`, `Ban công`, `Nhà tắm`.
 
@@ -28,7 +28,7 @@ Giao tiếp mặc định là HTTP và WebSocket trực tiếp với FastAPI; kh
 - Chưa có API nhận DHT11, MQ-2, PIR, LDR hoặc buzzer alarm từ ESP32.
 - Chưa có giao diện hiển thị telemetry và trạng thái online của ESP32.
 - Camera giám sát hiện lấy từ trình duyệt; backend chưa tự đọc camera gắn trực tiếp vào ESP32.
-- Music service theo dõi trạng thái và stream file; không điều khiển loa vật lý của máy chủ. Màn hình Android hiện điều khiển/trình bày trạng thái, chưa thấy trình phát stream Android.
+- Music service theo dõi trạng thái và stream file; không điều khiển loa vật lý của máy chủ. App iOS chỉ điều khiển/trình bày trạng thái, không tự phát stream.
 
 Không coi các mục trong lộ trình tiếp theo là đã hoàn thành cho tới khi mã nguồn và phần cứng xác nhận.
 
@@ -104,10 +104,10 @@ Breadboard dùng ba đường nguồn: ray `−` nối GND của ESP32 (một d�
 ## 6. Luồng dữ liệu đích
 
 ```text
-Web / Android
+Web / iOS
    │ REST: lệnh đèn, truy vấn trạng thái
    ▼
-FastAPI ─── WebSocket cập nhật UI ───► Web / Android
+FastAPI ─── WebSocket cập nhật UI ───► Web / iOS
    │
    ├── WebSocket lệnh và ACK ◄──────► ESP32
    └── HTTP telemetry ◄───────────── ESP32
@@ -120,7 +120,7 @@ FastAPI ─── WebSocket cập nhật UI ───► Web / Android
 Camera trình duyệt ──► /ws/gemini ──► Gemini + detector OpenCV hiện có
 ```
 
-ESP32 kết nối tới địa chỉ LAN của máy chạy backend. Không dùng `localhost` làm host trong firmware: trên ESP32, `localhost` là chính board. Máy tính và ESP32 cần cùng mạng LAN/Wi‑Fi; dùng IP nội bộ của máy chủ và cổng backend `8000`. Android cũng phải đặt URL API/WebSocket phù hợp trong cấu hình build.
+ESP32 kết nối tới địa chỉ LAN của máy chạy backend. Không dùng `localhost` làm host trong firmware: trên ESP32, `localhost` là chính board. Máy tính và ESP32 cần cùng mạng LAN/Wi‑Fi; dùng IP nội bộ của máy chủ và cổng backend `8000`. App iOS nhập địa chỉ backend ở tab Cài đặt.
 
 ### Hợp đồng backend dự kiến
 
@@ -129,10 +129,10 @@ ESP32 kết nối tới địa chỉ LAN của máy chạy backend. Không dùng
 - `POST /iot/telemetry`: ESP32 gửi `device_id`, phiên bản firmware, thời gian đo, giá trị DHT11/MQ-2/PIR/LDR và trạng thái LED/relay/buzzer. Bắt đầu với chu kỳ khoảng 2 giây cho số đo định kỳ; có thể gửi ngay khi trạng thái PIR hoặc cảnh báo gas đổi.
 - `GET /iot/state`: ứng dụng lấy snapshot telemetry, trạng thái kết nối thiết bị và đầu ra hiện tại.
 - `WS /ws/iot/device`: ESP32 đăng ký `device_id`, nhận lệnh đặt đầu ra từ backend và gửi ACK có `command_id` cùng trạng thái thật đã áp dụng.
-- `WS /ws/iot/updates`: web/Android nhận snapshot và sự kiện telemetry, kết nối/mất kết nối thiết bị, cảnh báo gas, cập nhật đầu ra.
+- `WS /ws/iot/updates`: web/iOS nhận snapshot và sự kiện telemetry, kết nối/mất kết nối thiết bị, cảnh báo gas, cập nhật đầu ra.
 - Các endpoint `/smart-home/lights/on` và `/smart-home/lights/off` hiện có tiếp tục là giao diện lệnh từ UI/AI. Sau tích hợp, backend phải gửi lệnh tới ESP32, chờ ACK hoặc báo thiết bị offline; UI không được hiển thị lệnh đã thực thi nếu ESP32 chưa xác nhận.
 
-Tên trường JSON, kiểu dữ liệu, mã lỗi và ví dụ hoàn chỉnh phải được ghi đồng bộ ở backend, firmware, web và Android khi triển khai API. Không để client và firmware tự đặt tên khác nhau cho cùng một cảm biến/phòng.
+Tên trường JSON, kiểu dữ liệu, mã lỗi và ví dụ hoàn chỉnh phải được ghi đồng bộ ở backend, firmware, web và iOS khi triển khai API. Không để client và firmware tự đặt tên khác nhau cho cùng một cảm biến/phòng.
 
 ## 7. Quy tắc tự động hóa đã chốt
 
@@ -164,7 +164,7 @@ Tên trường JSON, kiểu dữ liệu, mã lỗi và ví dụ hoàn chỉnh ph
 - Kết nối lệnh đèn hiện có với GPIO LED tương ứng; relay phụ có lệnh/hiển thị riêng, không gán relay thành 5 đèn.
 - Phát snapshot và cập nhật realtime tới ứng dụng. Không xóa các API đèn/nhạc/Gemini đang dùng.
 
-### Giai đoạn 4 — Giao diện web và Android
+### Giai đoạn 4 — Giao diện web và iOS
 
 - Hiển thị nhiệt độ, độ ẩm, mức MQ-2, trạng thái cảnh báo, ánh sáng, chuyển động, trạng thái ESP32 và thời điểm telemetry gần nhất.
 - Cho biết rõ ESP32 đang online/offline và lệnh đầu ra đã được ACK hay chưa.
@@ -173,7 +173,7 @@ Tên trường JSON, kiểu dữ liệu, mã lỗi và ví dụ hoàn chỉnh ph
 
 ### Giai đoạn 5 — Hiệu chuẩn, tích hợp và bàn giao
 
-- Kiểm tra lần lượt cảm biến, LED, buzzer và relay; sau đó kiểm tra điều khiển web, Android, Gemini và mất kết nối.
+- Kiểm tra lần lượt cảm biến, LED, buzzer và relay; sau đó kiểm tra điều khiển web, iOS, Gemini và mất kết nối.
 - Ghi vào guide các chân/module thực tế nếu khác sơ đồ mặc định, ngưỡng hiệu chuẩn cuối, địa chỉ LAN, lệnh build/nạp và cách reset/recovery.
 - Chỉ đánh dấu mục hoàn tất khi có bằng chứng kiểm tra phần mềm và phần cứng; cập nhật cả `AGENTS.md`/cẩm nang nếu kiến trúc thay đổi.
 
@@ -191,7 +191,7 @@ Tên trường JSON, kiểu dữ liệu, mã lỗi và ví dụ hoàn chỉnh ph
 | Kiểm tra | Thao tác | Kết quả đạt |
 |---|---|---|
 | Firmware và Wi‑Fi | Khởi động ESP32, ngắt rồi khôi phục Wi‑Fi | ESP32 kết nối lại, backend cập nhật online/last_seen |
-| 5 LED | Bật/tắt từng vị trí từ web rồi Android | Chỉ LED đúng phòng đổi; ACK và UI khớp trạng thái thật |
+| 5 LED | Bật/tắt từng vị trí từ web rồi iOS | Chỉ LED đúng phòng đổi; ACK và UI khớp trạng thái thật |
 | Relay | Đóng/cắt quạt/đèn USB 5 V thử nghiệm | Tải đổi trạng thái đúng; ESP32 không reset khi relay đóng/cắt |
 | DHT11 | Theo dõi vài chu kỳ và so sánh nhiệt độ/độ ẩm môi trường | Số đo mới lên backend/UI, lỗi sensor không làm treo vòng lặp |
 | MQ-2 | Chờ warm-up, ghi baseline và thử theo quy trình an toàn của module | ADC ổn định tương đối; vượt ngưỡng tạo cảnh báo và buzzer cục bộ |
@@ -210,4 +210,4 @@ Khi nhận yêu cầu về repository này:
 2. Kiểm tra mã nguồn hiện tại của subsystem người dùng hỏi; mã nguồn mới hơn tài liệu thì mã nguồn là sự thật về trạng thái hiện tại.
 3. Nói rõ phần nào đã được triển khai, phần nào còn là lộ trình. Không giả định firmware/API mới đã tồn tại chỉ vì được mô tả ở đây.
 4. Trước khi sửa wiring/pin/protocol/automation, cập nhật đồng bộ các lớp bị ảnh hưởng và tài liệu; giữ an toàn điện áp ESP32.
-5. Khi cần thay đổi pin hoặc giao thức đã chốt, nêu tác động tới firmware, backend, web/Android và cẩm nang.
+5. Khi cần thay đổi pin hoặc giao thức đã chốt, nêu tác động tới firmware, backend, web/iOS và cẩm nang.

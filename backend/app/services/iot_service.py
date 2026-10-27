@@ -346,7 +346,7 @@ class IoTService:
         return self.snapshot_without_history()
 
     # ------------------------------------------------------------------
-    # Người nghe (web/Android)
+    # Người nghe (web/iOS)
     # ------------------------------------------------------------------
 
     async def add_listener(self) -> "asyncio.Queue[dict]":
