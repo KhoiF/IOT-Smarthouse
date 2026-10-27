@@ -75,6 +75,8 @@ class Controller {
   uint32_t armActiveAt_ = 0;
 
   bool mq2Alarm_ = false;  // chỉ từ cảm biến, không gồm giả lập
+  bool mq2Above_ = false;
+  uint32_t mq2AboveSince_ = 0;
   bool gasAlarm_ = false;
   bool heatAlarm_ = false;
   bool simulatedGas_ = false;

@@ -112,10 +112,12 @@ class IoTService:
 
         if not sensors.get("mq2_ready"):
             gas_status = "cảm biến đang khởi động"
-        elif alarms.get("gas"):
-            gas_status = "vượt ngưỡng cảnh báo"
+        elif alarms.get("gas") or sensors.get("gas_level") == "danger":
+            gas_status = "nguy hiểm (từ 2500), đang báo cháy"
+        elif sensors.get("gas_level") == "high":
+            gas_status = "cao (1600–2499), chưa tới mức báo cháy"
         else:
-            gas_status = "bình thường"
+            gas_status = "bình thường (dưới 1600)"
 
         active_alarms = []
         if alarms.get("fire"):

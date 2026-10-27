@@ -114,7 +114,17 @@ Module 3 chân đã có điện trở kéo lên, không cần thêm. Thứ tự 
 | `AO` | GPIO 34 (nối thẳng) |
 | `DO` | không nối |
 
-Cấp 3,3 V thì AO không thể vượt 3,3 V, nên nối thẳng được. Đổi lại, cuộn nung chạy thiếu điện áp, cảm biến kém nhạy, và ngưỡng báo cháy hiện tại (`MQ2_ALARM_ON = 3600`) chưa được hiệu chuẩn.
+Cấp 3,3 V thì AO không thể vượt 3,3 V, nên nối thẳng được. Đổi lại, cuộn nung chạy thiếu điện áp nên cảm biến kém nhạy hơn.
+
+Ngưỡng hiện tại (giá trị ADC đã lọc, đặt trong `config.h`):
+
+| Giá trị MQ-2 | Mức | Hệ thống |
+|---|---|---|
+| < 1600 | Bình thường | – |
+| 1600 – 2499 | Cao | Web hiện cảnh báo vàng, chưa hú còi |
+| ≥ 2500 liên tục 3 giây | Nguy hiểm | Báo cháy (còi, ngắt relay, mở cửa); hết khi xuống ≤ 2200 |
+
+Nếu giá trị nhảy loạn giữa các lần đo (ví dụ 0 rồi 1500 rồi 20 chỉ trong vài giây) thì tín hiệu AO đang bị nhiễu: kiểm tra dây AO → D34, GND chung, và dùng lệnh Serial `mq2` để xem 20 mẫu thô liên tiếp.
 
 **Cách đúng (khi có 2 điện trở 10 kΩ):**
 

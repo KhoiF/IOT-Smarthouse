@@ -6,6 +6,7 @@ export interface IotSensors {
   dht_ok: boolean;
   mq2_raw: number;
   mq2_ready: boolean;
+  gas_level?: "normal" | "high" | "danger";
   motion: boolean;
   pir_ready: boolean;
   is_dark: boolean;

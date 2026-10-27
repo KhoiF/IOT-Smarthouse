@@ -276,6 +276,10 @@ void ServerLink::fillState(JsonObject state) {
   sensors["dht_ok"] = r.dhtOk;
   sensors["mq2_raw"] = r.mq2Raw;
   sensors["mq2_ready"] = r.mq2Ready;
+  // normal / high / danger theo MQ2_WARNING_LEVEL và báo cháy của MQ-2.
+  sensors["gas_level"] = controller_.gasAlarm() ? "danger"
+                         : (r.mq2Ready && r.mq2Raw >= MQ2_WARNING_LEVEL) ? "high"
+                                                                          : "normal";
   sensors["motion"] = r.motion;
   sensors["pir_ready"] = r.pirReady;
   sensors["is_dark"] = r.isDark;

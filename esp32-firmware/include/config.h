@@ -80,10 +80,13 @@ constexpr uint32_t ARM_EXIT_DELAY_MS = 2000;      // thời gian chờ sau khi b
 // ---------------------------------------------------------------------------
 // Ngưỡng
 // ---------------------------------------------------------------------------
-// MQ-2 đang cấp 3V3 và chưa hiệu chuẩn: đo giá trị nền bằng lệnh `status`
-// rồi chỉnh lại. Đổi sang 5 V + chia áp thì phải đo lại toàn bộ.
-constexpr float MQ2_ALARM_ON = 3600;
-constexpr float MQ2_ALARM_OFF = 3300;
+// MQ-2 (giá trị ADC đã lọc, 0..4095), mức do người dùng chốt:
+//   < 1600 bình thường; 1600..2499 cao (chỉ cảnh báo trên app); >= 2500 nguy hiểm -> báo cháy.
+// MQ-2 đang cấp 3V3; đổi sang 5 V + chia áp thì phải đo và chỉnh lại.
+constexpr float MQ2_WARNING_LEVEL = 1600;
+constexpr float MQ2_ALARM_ON = 2500;
+constexpr float MQ2_ALARM_OFF = 2200;            // hết báo cháy khi xuống dưới mức này
+constexpr uint32_t MQ2_ALARM_CONFIRM_MS = 3000;  // phải vượt MQ2_ALARM_ON liên tục 3 giây mới báo cháy
 constexpr float MQ2_FILTER_ALPHA = 0.1f;  // lọc trung bình mũ cho ADC
 
 // DHT11 chỉ đo tới khoảng 50 °C.

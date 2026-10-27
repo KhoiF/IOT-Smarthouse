@@ -53,7 +53,16 @@ void Controller::updateAlarms(uint32_t now) {
 
   // MQ-2 có hysteresis để còi không bật/tắt liên tục quanh ngưỡng.
   if (r.mq2Ready) {
-    if (!mq2Alarm_ && r.mq2Raw >= MQ2_ALARM_ON) mq2Alarm_ = true;
+    // Một lần nhảy vọt do nhiễu không đủ: phải vượt ngưỡng liên tục MQ2_ALARM_CONFIRM_MS.
+    if (r.mq2Raw >= MQ2_ALARM_ON) {
+      if (!mq2Above_) {
+        mq2Above_ = true;
+        mq2AboveSince_ = now;
+      }
+      if (!mq2Alarm_ && now - mq2AboveSince_ >= MQ2_ALARM_CONFIRM_MS) mq2Alarm_ = true;
+    } else {
+      mq2Above_ = false;
+    }
     if (mq2Alarm_ && r.mq2Raw <= MQ2_ALARM_OFF) mq2Alarm_ = false;
   }
   const bool gas = mq2Alarm_ || simulatedGas_;
