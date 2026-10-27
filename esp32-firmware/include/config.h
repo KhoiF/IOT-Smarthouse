@@ -44,9 +44,10 @@ constexpr uint8_t PIN_DOOR_SENSOR = 16;      // INPUT_PULLUP: nam châm sát (c�
 constexpr bool DOOR_SENSOR_ENABLED = false;
 constexpr uint8_t DOOR_CLOSED_ANGLE = 0;
 constexpr uint8_t DOOR_OPEN_ANGLE = 90;
-constexpr uint32_t DOOR_OPEN_MS = 5000;      // tự đóng sau 5 giây
+// 0 = không tự đóng: cửa mở tới khi có lệnh đóng (nút hoặc giọng nói). Đặt > 0 (ms) để tự đóng.
+constexpr uint32_t DOOR_AUTO_CLOSE_MS = 0;
 constexpr uint32_t DOOR_MOVE_MS = 700;       // thời gian servo quay xong, sau đó ngắt xung
-constexpr uint32_t DOOR_FORCED_GRACE_MS = 1500;  // cửa đã đóng mà reed vẫn hở quá lâu mới tính là bị mở
+constexpr uint32_t DOOR_NOT_CLOSED_MS = 3000;  // servo đã về vị trí đóng mà reed vẫn hở quá 3 giây -> "chưa đóng hẳn"
 constexpr uint16_t SERVO_MIN_US = 500;       // xung ứng với 0°
 constexpr uint16_t SERVO_MAX_US = 2400;      // xung ứng với 180°
 

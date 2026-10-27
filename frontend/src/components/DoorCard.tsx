@@ -26,14 +26,18 @@ const DOOR_STATE_LABEL: Record<string, string> = {
   closed: "Đang đóng",
   opening: "Đang mở…",
   open: "Đang mở",
-  closing: "Đang đóng lại…"
+  closing: "Đang đóng lại…",
+  not_closed: "Chưa đóng hẳn"
 };
 
 const LOG_LABEL: Record<DoorLogEntry["event"], string> = {
   face_open: "mở cửa (nhận diện)",
   manual_open: "mở cửa bằng nút",
   stranger: "người lạ – không mở",
-  open_failed: "mở cửa thất bại"
+  open_failed: "mở cửa thất bại",
+  manual_close: "đóng cửa bằng nút",
+  voice_close: "đóng cửa bằng giọng nói",
+  close_failed: "đóng cửa thất bại"
 };
 
 export function DoorCard({ device, deviceState, showFeedback }: DoorCardProps) {
@@ -41,7 +45,7 @@ export function DoorCard({ device, deviceState, showFeedback }: DoorCardProps) {
   const camera = useDoorCamera({ recognize: tab === "recognize" });
   const [log, setLog] = useState<DoorLogEntry[]>([]);
   const [people, setPeople] = useState<FacePerson[]>([]);
-  const [isOpening, setIsOpening] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"open" | "close" | null>(null);
   // Khung video theo đúng tỉ lệ camera để khung nhận diện (tính theo tỉ lệ ảnh) không bị lệch.
   const [aspectRatio, setAspectRatio] = useState("16 / 9");
 
@@ -83,30 +87,34 @@ export function DoorCard({ device, deviceState, showFeedback }: DoorCardProps) {
     previousDevice.current = camera.deviceId;
   }, [camera]);
 
-  const openDoor = async () => {
-    setIsOpening(true);
+  const sendDoorCommand = async (action: "open" | "close") => {
+    setPendingAction(action);
     try {
-      await apiClient("/door/open", { method: "POST" });
-      showFeedback("Đã gửi lệnh mở cửa");
+      const result = await apiClient<{ disarmed?: boolean }>(`/door/${action}`, { method: "POST" });
+      showFeedback(
+        action === "close" ? "Đã đóng cửa" : result.disarmed ? "Đã mở cửa và tắt chế độ An ninh" : "Đã mở cửa"
+      );
       void refreshLog();
     } catch (error) {
       if (error instanceof Error) showFeedback(error.message, true);
     } finally {
-      setIsOpening(false);
+      setPendingAction(null);
     }
   };
+
+  const doorIsOpen = door?.state === "open" || door?.state === "opening";
 
   return (
     <Card className="flex flex-col">
       <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
           <CardTitle>Cửa ra vào</CardTitle>
-          <CardDescription>Nhận diện khuôn mặt thành viên để mở cửa; mở cửa không tắt chế độ An ninh.</CardDescription>
+          <CardDescription>Nhận diện khuôn mặt thành viên để mở cửa; mở cửa (khuôn mặt hoặc nút) sẽ tắt chế độ An ninh.</CardDescription>
         </div>
         <span
           className={cn(
             "inline-flex shrink-0 items-center rounded-full border px-3 py-1 text-xs font-medium",
-            door?.held_by_fire
+            door?.held_by_fire || door?.state === "not_closed"
               ? "border-destructive/50 text-destructive"
               : door && door.state !== "closed"
                 ? "border-amber-400/60 text-amber-700 dark:text-amber-300"
@@ -118,6 +126,24 @@ export function DoorCard({ device, deviceState, showFeedback }: DoorCardProps) {
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col gap-4">
+        {door && (
+          <p className="text-sm text-muted-foreground">
+            Cảm biến:{" "}
+            {door.sensor_closed === null ? (
+              "chưa lắp (trạng thái chỉ theo lệnh servo)"
+            ) : (
+              <span className={cn("font-medium", door.sensor_closed ? "text-foreground" : "text-destructive")}>
+                {door.sensor_closed ? "cửa đóng" : "cửa hở"}
+              </span>
+            )}
+          </p>
+        )}
+        {door?.state === "not_closed" && (
+          <div role="alert" className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm">
+            <p className="font-semibold text-destructive">Cửa chưa đóng hẳn</p>
+            <p>Servo đã về vị trí đóng nhưng cảm biến vẫn báo cửa hở. Kiểm tra cửa có bị kẹt hoặc vướng không.</p>
+          </div>
+        )}
         <div className="flex gap-2" role="tablist">
           {(["recognize", "members"] as const).map((value) => (
             <Button
@@ -204,9 +230,19 @@ export function DoorCard({ device, deviceState, showFeedback }: DoorCardProps) {
               <p className="text-sm" aria-live="polite">
                 {describeDecision(camera.decision, camera.isActive)}
               </p>
-              <Button type="button" variant="outline" disabled={!online || isOpening} onClick={() => void openDoor()}>
-                {isOpening ? "Đang gửi…" : "Mở cửa"}
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" disabled={!online || pendingAction !== null} onClick={() => void sendDoorCommand("open")}>
+                  {pendingAction === "open" ? "Đang gửi…" : "Mở cửa"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!online || pendingAction !== null || !doorIsOpen || door?.held_by_fire}
+                  onClick={() => void sendDoorCommand("close")}
+                >
+                  {pendingAction === "close" ? "Đang gửi…" : "Đóng cửa"}
+                </Button>
+              </div>
             </div>
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Nhật ký cửa</h3>
@@ -215,7 +251,7 @@ export function DoorCard({ device, deviceState, showFeedback }: DoorCardProps) {
                   {log.map((entry) => (
                     <li key={`${entry.t}-${entry.event}`} className="flex gap-2">
                       <span className="shrink-0 tabular-nums text-muted-foreground">{formatClock(entry.t)}</span>
-                      <span className={cn(entry.event === "stranger" || entry.event === "open_failed" ? "text-destructive" : "")}>
+                      <span className={cn(entry.event === "stranger" || entry.event.endsWith("_failed") ? "text-destructive" : "")}>
                         {entry.name ? `${entry.name} – ` : ""}
                         {LOG_LABEL[entry.event] ?? entry.event}
                         {entry.message ? ` (${entry.message})` : ""}
@@ -252,8 +288,10 @@ function describeDecision(decision: DoorDecision | null, active: boolean) {
       return `Nhận ra ${decision.name}, đang xác nhận…`;
     case "cooldown":
       return `${decision.name} – cửa vừa mở, chờ một lúc.`;
+    case "already_open":
+      return `Nhận ra ${decision.name} – cửa đang mở.`;
     case "opened":
-      return `Đã mở cửa cho ${decision.name ?? "thành viên"}.`;
+      return `Đã mở cửa cho ${decision.name ?? "thành viên"}${decision.disarmed ? " và tắt chế độ An ninh" : ""}.`;
     case "error":
       return `Không mở được cửa: ${decision.message}`;
   }

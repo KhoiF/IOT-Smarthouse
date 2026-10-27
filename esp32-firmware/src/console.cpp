@@ -83,6 +83,8 @@ void Console::handleLine(char* line, uint32_t now) {
     printResult(controller_.setRelayByUser(index - 1, on == 1, now));
   } else if (strcmp(cmd, "door") == 0 && arg1 && strcmp(arg1, "open") == 0) {
     printResult(controller_.openDoorByUser(now));
+  } else if (strcmp(cmd, "door") == 0 && arg1 && strcmp(arg1, "close") == 0) {
+    printResult(controller_.closeDoorByUser(now));
   } else if (strcmp(cmd, "arm") == 0) {
     controller_.setArmed(true, now);
   } else if (strcmp(cmd, "disarm") == 0) {
@@ -115,7 +117,7 @@ void Console::printHelp() {
   Serial.println("  log                     bat/tat dong log moi 2 giay");
   Serial.println("  led <1-5> on|off        1=phong khach 2=phong ngu 3=nha bep 4=ban cong 5=nha tam");
   Serial.println("  relay <1-2> on|off      1=quat 2=den");
-  Serial.println("  door open               mo cua (tu dong sau 5 giay)");
+  Serial.println("  door open | door close  mo cua / dong cua");
   Serial.println("  arm | disarm            bat/tat che do An ninh");
   Serial.println("  silence                 tat coi dang keu");
   Serial.println("  sim gas on|off          gia lap MQ-2 vuot nguong (khong can khoi that)");
@@ -185,6 +187,9 @@ void Console::printResult(CommandResult result) {
       break;
     case CommandResult::BlockedByFire:
       Serial.println("Loi: dang canh bao chay, khong bat relay");
+      break;
+    case CommandResult::DoorHeldByFire:
+      Serial.println("Loi: dang canh bao chay, cua duoc giu mo de thoat hiem");
       break;
   }
 }

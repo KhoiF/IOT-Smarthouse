@@ -88,6 +88,14 @@ async def open_door() -> Dict[str, Any]:
     return result
 
 
+@router.post("/door/close")
+async def close_door() -> Dict[str, Any]:
+    result = await door_service.close_door("manual")
+    if result["action"] == "error":
+        raise HTTPException(status_code=409, detail=result["message"])
+    return result
+
+
 @router.get("/door/log")
 def door_log() -> List[Dict[str, Any]]:
     return door_service.recent_log()

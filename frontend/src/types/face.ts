@@ -13,7 +13,8 @@ export type DoorDecision =
   | { action: "none" | "stranger" }
   | { action: "confirming"; name: string; frames: number }
   | { action: "cooldown"; name: string }
-  | { action: "opened"; name: string | null }
+  | { action: "already_open"; name: string }
+  | { action: "opened"; name: string | null; disarmed?: boolean }
   | { action: "error"; name: string | null; message: string };
 
 export interface RecognizeResponse {
@@ -32,7 +33,7 @@ export interface FacePerson {
 
 export interface DoorLogEntry {
   t: number;
-  event: "face_open" | "manual_open" | "stranger" | "open_failed";
+  event: "face_open" | "manual_open" | "stranger" | "open_failed" | "manual_close" | "voice_close" | "close_failed";
   name: string | null;
   similarity: number | null;
   message?: string;

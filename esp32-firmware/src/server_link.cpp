@@ -52,6 +52,8 @@ const char* errorCode(CommandResult result) {
       return "invalid_target";
     case CommandResult::BlockedByFire:
       return "blocked_by_fire";
+    case CommandResult::DoorHeldByFire:
+      return "door_held_by_fire";
   }
   return "bad_request";
 }
@@ -209,6 +211,8 @@ void ServerLink::handleCommand(const uint8_t* payload, size_t length) {
     }
   } else if (strcmp(action, "open_door") == 0) {
     error = errorCode(controller_.openDoorByUser(now));
+  } else if (strcmp(action, "close_door") == 0) {
+    error = errorCode(controller_.closeDoorByUser(now));
   } else if (strcmp(action, "silence") == 0) {
     controller_.silenceAlarm();
   } else {

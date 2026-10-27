@@ -39,6 +39,7 @@ class GeminiService:
     - turn_on_light: bật đèn ở một phòng (Phòng khách, Phòng ngủ, Nhà bếp, Ban công, Nhà tắm)
     - turn_off_light: tắt đèn ở một phòng trong danh sách trên
     - enable_security_mode: bật chế độ An ninh chống trộm
+    - close_door: đóng cửa ra vào
     - get_home_status: đọc số liệu cảm biến và trạng thái thiết bị trong nhà
     - play_music: phát bài hát gần giống nhất với tên được yêu cầu
     - pause_music: tạm dừng bài hát đang phát
@@ -60,9 +61,14 @@ class GeminiService:
     8. Khi người dùng muốn bật chế độ An ninh / chống trộm / báo động, gọi enable_security_mode.
        Vì lý do an toàn, KHÔNG thể tắt chế độ An ninh bằng giọng nói: nếu được yêu cầu tắt,
        hãy từ chối lịch sự và hướng dẫn tắt bằng công tắc "Chế độ An ninh" trên ứng dụng.
-    9. Cửa ra vào chỉ mở bằng nhận diện khuôn mặt hoặc nút "Mở cửa" trên ứng dụng. KHÔNG thể mở cửa
-       bằng giọng nói: nếu được yêu cầu, từ chối lịch sự và hướng dẫn dùng ứng dụng. Câu hỏi như
+    9. Cửa ra vào chỉ MỞ bằng nhận diện khuôn mặt hoặc nút "Mở cửa" trên ứng dụng. KHÔNG thể mở cửa
+       bằng giọng nói: nếu được yêu cầu, từ chối lịch sự và hướng dẫn dùng ứng dụng.
+       Người dùng muốn ĐÓNG cửa thì gọi close_door. Nếu kết quả là error (ví dụ đang cháy, cửa được
+       giữ mở để thoát hiểm), đọc lại lý do và không nói là đã đóng. Câu hỏi như
        "ai vừa về", "cửa đang mở không" thì gọi get_home_status (trường door và last_door_event).
+       Khi door.sensor là "đóng" hoặc "hở", trả lời theo cảm biến; nếu door.state là "chưa đóng hẳn",
+       nói rõ cửa đang hở dù đã ra lệnh đóng và gợi ý kiểm tra cửa bị kẹt. Nếu chưa lắp cảm biến,
+       nói rằng trạng thái chỉ dựa theo lệnh đóng/mở của servo.
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -799,6 +805,20 @@ class GeminiService:
                     )
                 )
 
+            elif name == "close_door":
+                result = await get_door_service().close_door("voice")
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response=(
+                            {"result": "success", "message": "Đã đóng cửa ra vào"}
+                            if result["action"] == "closed"
+                            else {"result": "error", "message": result["message"]}
+                        ),
+                    )
+                )
+
             elif name == "get_home_status":
                 responses.append(
                     types.FunctionResponse(
@@ -874,6 +894,18 @@ class GeminiService:
                             description=(
                                 "Bật chế độ An ninh chống trộm: cảm biến chuyển động sẽ hú còi khi phát hiện người. "
                                 "Không có chức năng tắt An ninh bằng giọng nói."
+                            ),
+                            parameters={
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="close_door",
+                            description=(
+                                "Đóng cửa ra vào ngay. Chỉ có chức năng ĐÓNG; mở cửa phải bấm nút trên ứng dụng "
+                                "hoặc dùng nhận diện khuôn mặt."
                             ),
                             parameters={
                                 "type": "object",

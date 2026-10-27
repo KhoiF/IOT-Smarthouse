@@ -23,7 +23,7 @@ export interface IotSecurity {
 }
 
 export interface IotDoor {
-  state: "closed" | "opening" | "open" | "closing";
+  state: "closed" | "opening" | "open" | "closing" | "not_closed";
   held_by_fire: boolean;
   sensor_closed: boolean | null;
 }

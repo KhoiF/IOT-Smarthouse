@@ -237,9 +237,13 @@ ESP32 GPIO13 ──────────────► servo cam (tín hiệ
 - Lắp xong, đổi `DOOR_SENSOR_ENABLED = true` trong `config.h` rồi nạp lại. Khi chưa lắp mà bật cờ này, chân bỏ trống đọc là "cửa hở" và gây báo trộm giả.
 
 Cách hoạt động:
-- Lệnh mở (nhận diện khuôn mặt hoặc nút "Mở cửa"): servo quay 90°, giữ **5 giây**, rồi tự đóng, kể cả khi mất mạng.
-- **Cảnh báo cháy**: cửa mở và giữ mở để thoát hiểm; hết cháy 5 giây thì tự đóng.
-- **An ninh bật** mà reed switch báo cửa hở trong khi firmware không ra lệnh mở → **báo trộm** (còi + đèn phụ). Mở cửa bằng nhận diện không tắt An ninh, nên PIR vẫn báo nếu có người đi vào.
+- Lệnh mở (nhận diện khuôn mặt hoặc nút "Mở cửa"): servo quay 90° và **giữ mở**, không tự đóng. Không mở được bằng giọng nói.
+- Lệnh đóng (nút "Đóng cửa" hoặc nói "đóng cửa"): servo quay về 0°; bị từ chối khi đang cháy.
+- Muốn cửa tự đóng sau một khoảng thời gian, đặt `DOOR_AUTO_CLOSE_MS` (ms) trong `config.h`; mặc định `0` = không tự đóng.
+- **Cảnh báo cháy**: cửa mở và giữ mở để thoát hiểm; hết cháy cửa vẫn mở cho tới khi có lệnh đóng.
+- Servo đã về vị trí đóng mà reed switch vẫn báo hở quá **3 giây** → trạng thái **"Chưa đóng hẳn"** (`not_closed`): Web hiện cảnh báo, trợ lý giọng nói trả lời "cửa đang hở dù đã ra lệnh đóng". Thường là cửa bị kẹt, vướng, hoặc nam châm lệch xa reed switch.
+- **An ninh bật** mà cửa ở trạng thái "Chưa đóng hẳn" (cửa bị đẩy ra khi firmware không ra lệnh mở) → **báo trộm** (còi + đèn phụ), Web ghi "Cửa bị mở trái phép". Mở cửa hợp lệ (nhận diện khuôn mặt, nút "Mở cửa", lệnh `door open`) **tự tắt An ninh**; cửa tự mở khi cháy thì không tắt An ninh.
+- Web (card "Cửa ra vào") hiện dòng **"Cảm biến: cửa đóng / cửa hở"**; khi chưa lắp reed switch thì ghi "chưa lắp".
 
 ## 5. Kiểm tra trước khi cắm USB
 
@@ -271,7 +275,8 @@ Firmware có sẵn lệnh thử, không cần mạng.
 | Relay | `relay 1 on` / `relay 2 on` | Có tiếng tách, quạt/đèn chạy đúng kênh |
 | An ninh | `arm`, đợi 2 giây, vẫy tay | Còi báo trộm (chậm), đèn phụ bật; hết chuyển động ~2 giây thì cả hai tự tắt |
 | | `disarm` | Tắt chế độ An ninh |
-| Cửa | `door open` | Servo quay sang mở, 5 giây sau tự đóng; `status` hiện trạng thái cửa |
+| Cửa | `door open` | Servo quay sang mở và giữ mở; `status` hiện trạng thái cửa |
+| | `door close` | Servo đóng; đang cháy thì báo lỗi vì cửa được giữ mở |
 
 Dòng log định kỳ có dạng:
 
