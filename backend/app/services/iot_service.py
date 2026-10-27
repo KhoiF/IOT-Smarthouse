@@ -51,6 +51,7 @@ class CommandRejectedError(IoTError):
         "blocked_by_fire": "Đang có cảnh báo cháy, không thể bật relay",
         "invalid_target": "Thiết bị không hợp lệ",
         "door_disabled": "ESP32 chưa bật chức năng cửa",
+        "door_held_by_fire": "Đang có cảnh báo cháy, cửa được giữ mở để thoát hiểm",
         "unknown_action": "ESP32 không hiểu lệnh",
         "bad_request": "Lệnh gửi tới ESP32 không hợp lệ",
     }
@@ -111,10 +112,12 @@ class IoTService:
 
         if not sensors.get("mq2_ready"):
             gas_status = "cảm biến đang khởi động"
-        elif alarms.get("gas"):
-            gas_status = "vượt ngưỡng cảnh báo"
+        elif alarms.get("gas") or sensors.get("gas_level") == "danger":
+            gas_status = "nguy hiểm (từ 2500), đang báo cháy"
+        elif sensors.get("gas_level") == "high":
+            gas_status = "cao (1600–2499), chưa tới mức báo cháy"
         else:
-            gas_status = "bình thường"
+            gas_status = "bình thường (dưới 1600)"
 
         active_alarms = []
         if alarms.get("fire"):
@@ -150,9 +153,7 @@ class IoTService:
             "lights": {room.name: "bật" if leds.get(room.id) else "tắt" for room in ROOMS},
             "devices": {relay.name: "bật" if relays.get(relay.id) else "tắt" for relay in RELAYS},
             "security_mode": "bật" if (state.get("security") or {}).get("armed") else "tắt",
-            "door": {
-                "closed": "đóng", "opening": "đang mở", "open": "mở", "closing": "đang đóng"
-            }.get((state.get("door") or {}).get("state"), "không rõ"),
+            "door": self._describe_door(state.get("door") or {}),
             "active_alarms": active_alarms,
         }
         if not self.online or age_seconds > 30:
@@ -162,6 +163,22 @@ class IoTService:
         if history:
             summary["last_hour"] = history
         return summary
+
+    @staticmethod
+    def _describe_door(door: Dict[str, Any]) -> Dict[str, Any]:
+        sensor_closed = door.get("sensor_closed")
+        return {
+            "state": {
+                "closed": "đã đóng",
+                "opening": "đang mở",
+                "open": "đang mở",
+                "closing": "đang đóng",
+                "not_closed": "chưa đóng hẳn: đã ra lệnh đóng nhưng cảm biến vẫn báo cửa hở (có thể bị kẹt hoặc vướng)",
+            }.get(door.get("state"), "không rõ"),
+            "held_open_by_fire": bool(door.get("held_by_fire")),
+            # Cảm biến cửa (reed switch) là nguồn đáng tin nhất; None = chưa lắp, chỉ biết theo lệnh servo.
+            "sensor": "chưa lắp cảm biến cửa" if sensor_closed is None else ("đóng" if sensor_closed else "hở"),
+        }
 
     def _history_stats(self, since: float) -> Optional[Dict[str, Any]]:
         points = [point for point in self._history if point["t"] >= since]
@@ -180,6 +197,12 @@ class IoTService:
             return None
         stats["minutes_covered"] = round((time.time() - points[0]["t"]) / 60)
         return stats
+
+    def door_state(self) -> Optional[str]:
+        return ((self._state or {}).get("door") or {}).get("state")
+
+    def is_armed(self) -> bool:
+        return bool(((self._state or {}).get("security") or {}).get("armed"))
 
     def check_token(self, token: Optional[str]) -> bool:
         expected = settings.iot_device_token
@@ -291,6 +314,9 @@ class IoTService:
     async def open_door(self) -> Dict[str, Any]:
         return await self._send_command("open_door")
 
+    async def close_door(self) -> Dict[str, Any]:
+        return await self._send_command("close_door")
+
     async def _send_command(self, action: str, **params: Any) -> Dict[str, Any]:
         websocket = self._device_ws
         if websocket is None:
@@ -322,7 +348,7 @@ class IoTService:
         return self.snapshot_without_history()
 
     # ------------------------------------------------------------------
-    # Người nghe (web/Android)
+    # Người nghe (web/iOS)
     # ------------------------------------------------------------------
 
     async def add_listener(self) -> "asyncio.Queue[dict]":

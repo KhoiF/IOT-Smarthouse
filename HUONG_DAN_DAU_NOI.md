@@ -114,7 +114,17 @@ Module 3 chân đã có điện trở kéo lên, không cần thêm. Thứ tự 
 | `AO` | GPIO 34 (nối thẳng) |
 | `DO` | không nối |
 
-Cấp 3,3 V thì AO không thể vượt 3,3 V, nên nối thẳng được. Đổi lại, cuộn nung chạy thiếu điện áp, cảm biến kém nhạy, và ngưỡng báo cháy hiện tại (`MQ2_ALARM_ON = 3600`) chưa được hiệu chuẩn.
+Cấp 3,3 V thì AO không thể vượt 3,3 V, nên nối thẳng được. Đổi lại, cuộn nung chạy thiếu điện áp nên cảm biến kém nhạy hơn.
+
+Ngưỡng hiện tại (giá trị ADC đã lọc, đặt trong `config.h`):
+
+| Giá trị MQ-2 | Mức | Hệ thống |
+|---|---|---|
+| < 1600 | Bình thường | – |
+| 1600 – 2499 | Cao | Web hiện cảnh báo vàng, chưa hú còi |
+| ≥ 2500 liên tục 3 giây | Nguy hiểm | Báo cháy (còi, ngắt relay, mở cửa); hết khi xuống ≤ 2200 |
+
+Nếu giá trị nhảy loạn giữa các lần đo (ví dụ 0 rồi 1500 rồi 20 chỉ trong vài giây) thì tín hiệu AO đang bị nhiễu: kiểm tra dây AO → D34, GND chung, và dùng lệnh Serial `mq2` để xem 20 mẫu thô liên tiếp.
 
 **Cách đúng (khi có 2 điện trở 10 kΩ):**
 
@@ -237,9 +247,13 @@ ESP32 GPIO13 ──────────────► servo cam (tín hiệ
 - Lắp xong, đổi `DOOR_SENSOR_ENABLED = true` trong `config.h` rồi nạp lại. Khi chưa lắp mà bật cờ này, chân bỏ trống đọc là "cửa hở" và gây báo trộm giả.
 
 Cách hoạt động:
-- Lệnh mở (nhận diện khuôn mặt hoặc nút "Mở cửa"): servo quay 90°, giữ **5 giây**, rồi tự đóng, kể cả khi mất mạng.
-- **Cảnh báo cháy**: cửa mở và giữ mở để thoát hiểm; hết cháy 5 giây thì tự đóng.
-- **An ninh bật** mà reed switch báo cửa hở trong khi firmware không ra lệnh mở → **báo trộm** (còi + đèn phụ). Mở cửa bằng nhận diện không tắt An ninh, nên PIR vẫn báo nếu có người đi vào.
+- Lệnh mở (nhận diện khuôn mặt hoặc nút "Mở cửa"): servo quay 90° và **giữ mở**, không tự đóng. Không mở được bằng giọng nói.
+- Lệnh đóng (nút "Đóng cửa" hoặc nói "đóng cửa"): servo quay về 0°; bị từ chối khi đang cháy.
+- Muốn cửa tự đóng sau một khoảng thời gian, đặt `DOOR_AUTO_CLOSE_MS` (ms) trong `config.h`; mặc định `0` = không tự đóng.
+- **Cảnh báo cháy**: cửa mở và giữ mở để thoát hiểm; hết cháy cửa vẫn mở cho tới khi có lệnh đóng.
+- Servo đã về vị trí đóng mà reed switch vẫn báo hở quá **3 giây** → trạng thái **"Chưa đóng hẳn"** (`not_closed`): Web hiện cảnh báo, trợ lý giọng nói trả lời "cửa đang hở dù đã ra lệnh đóng". Thường là cửa bị kẹt, vướng, hoặc nam châm lệch xa reed switch.
+- **An ninh bật** mà cửa ở trạng thái "Chưa đóng hẳn" (cửa bị đẩy ra khi firmware không ra lệnh mở) → **báo trộm** (còi + đèn phụ), Web ghi "Cửa bị mở trái phép". Mở cửa hợp lệ (nhận diện khuôn mặt, nút "Mở cửa", lệnh `door open`) **tự tắt An ninh**; cửa tự mở khi cháy thì không tắt An ninh.
+- Web (card "Cửa ra vào") hiện dòng **"Cảm biến: cửa đóng / cửa hở"**; khi chưa lắp reed switch thì ghi "chưa lắp".
 
 ## 5. Kiểm tra trước khi cắm USB
 
@@ -271,7 +285,8 @@ Firmware có sẵn lệnh thử, không cần mạng.
 | Relay | `relay 1 on` / `relay 2 on` | Có tiếng tách, quạt/đèn chạy đúng kênh |
 | An ninh | `arm`, đợi 2 giây, vẫy tay | Còi báo trộm (chậm), đèn phụ bật; hết chuyển động ~2 giây thì cả hai tự tắt |
 | | `disarm` | Tắt chế độ An ninh |
-| Cửa | `door open` | Servo quay sang mở, 5 giây sau tự đóng; `status` hiện trạng thái cửa |
+| Cửa | `door open` | Servo quay sang mở và giữ mở; `status` hiện trạng thái cửa |
+| | `door close` | Servo đóng; đang cháy thì báo lỗi vì cửa được giữ mở |
 
 Dòng log định kỳ có dạng:
 

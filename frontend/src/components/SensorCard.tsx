@@ -55,11 +55,14 @@ export function SensorCard({ device, deviceState, history }: SensorCardProps) {
                 ? undefined
                 : !sensors.mq2_ready
                   ? "Đang khởi động"
-                  : alarms?.gas
-                    ? "Vượt ngưỡng"
-                    : "Bình thường (giá trị ADC)"
+                  : alarms?.gas || sensors.gas_level === "danger"
+                    ? "Nguy hiểm – báo cháy"
+                    : sensors.gas_level === "high"
+                      ? "Cao (cảnh báo)"
+                      : "Bình thường"
             }
             danger={alarms?.gas}
+            warning={sensors?.gas_level === "high"}
           />
           <StatTile label="Ánh sáng" value={sensors ? (sensors.is_dark ? "Tối" : "Sáng") : "--"} />
           <StatTile
@@ -111,12 +114,43 @@ export function SensorCard({ device, deviceState, history }: SensorCardProps) {
   );
 }
 
-function StatTile({ label, value, hint, danger }: { label: string; value: string; hint?: string; danger?: boolean }) {
+function StatTile({
+  label,
+  value,
+  hint,
+  danger,
+  warning
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  danger?: boolean;
+  warning?: boolean;
+}) {
   return (
-    <div className={cn("rounded-lg border p-3", danger && "border-destructive/60 bg-destructive/10")}>
+    <div
+      className={cn(
+        "rounded-lg border p-3",
+        danger ? "border-destructive/60 bg-destructive/10" : warning && "border-amber-400/70 bg-amber-50/70 dark:bg-amber-500/10"
+      )}
+    >
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-xl font-semibold tabular-nums text-foreground">{value}</p>
-      {hint && <p className={cn("text-xs", danger ? "font-medium text-destructive" : "text-muted-foreground")}>{hint}</p>}
+      {hint && (
+        <p
+          className={cn(
+            "text-xs",
+            danger
+              ? "font-medium text-destructive"
+              : warning
+                ? "font-medium text-amber-700 dark:text-amber-300"
+                : "text-muted-foreground"
+          )}
+        >
+          {warning && !danger ? "⚠ " : ""}
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

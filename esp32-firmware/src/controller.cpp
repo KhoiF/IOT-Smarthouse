@@ -23,6 +23,7 @@ void Controller::update(uint32_t now) {
   applyBuzzer();
 
   if (door_.state() != lastDoorState_) {
+    if (door_.state() == DoorState::NotClosed) event("Cua chua dong han: reed switch van bao ho");
     lastDoorState_ = door_.state();
     changed_ = true;
   }
@@ -32,6 +33,18 @@ CommandResult Controller::openDoorByUser(uint32_t now) {
   door_.open(now);
   changed_ = true;
   event("Mo cua theo lenh");
+  // Mở cửa hợp lệ (nhận diện khuôn mặt, nút trên app) nghĩa là chủ nhà đã về: tắt An ninh.
+  // Cửa tự mở khi cháy không đi qua hàm này nên không tắt An ninh.
+  if (armed_) setArmed(false, now);
+  return CommandResult::Ok;
+}
+
+CommandResult Controller::closeDoorByUser(uint32_t now) {
+  // Đang cháy thì cửa được giữ mở để thoát hiểm.
+  if (door_.held()) return CommandResult::DoorHeldByFire;
+  door_.close(now);
+  changed_ = true;
+  event("Dong cua theo lenh");
   return CommandResult::Ok;
 }
 
@@ -40,7 +53,16 @@ void Controller::updateAlarms(uint32_t now) {
 
   // MQ-2 có hysteresis để còi không bật/tắt liên tục quanh ngưỡng.
   if (r.mq2Ready) {
-    if (!mq2Alarm_ && r.mq2Raw >= MQ2_ALARM_ON) mq2Alarm_ = true;
+    // Một lần nhảy vọt do nhiễu không đủ: phải vượt ngưỡng liên tục MQ2_ALARM_CONFIRM_MS.
+    if (r.mq2Raw >= MQ2_ALARM_ON) {
+      if (!mq2Above_) {
+        mq2Above_ = true;
+        mq2AboveSince_ = now;
+      }
+      if (!mq2Alarm_ && now - mq2AboveSince_ >= MQ2_ALARM_CONFIRM_MS) mq2Alarm_ = true;
+    } else {
+      mq2Above_ = false;
+    }
     if (mq2Alarm_ && r.mq2Raw <= MQ2_ALARM_OFF) mq2Alarm_ = false;
   }
   const bool gas = mq2Alarm_ || simulatedGas_;
@@ -64,7 +86,7 @@ void Controller::updateAlarms(uint32_t now) {
     fireSilenced_ = false;
     event("Het canh bao chay");
   }
-  // Cháy: mở và giữ cửa mở để thoát hiểm; hết cháy thì cửa tự đóng sau DOOR_OPEN_MS.
+  // Cháy: mở và giữ cửa mở để thoát hiểm; hết cháy thì cửa vẫn mở cho tới khi có lệnh đóng.
   door_.setHold(fireAlarm(), now);
 
   // Ngắt cầu dao mô phỏng: cắt cả hai relay và bỏ lệnh tay đang giữ.
@@ -78,9 +100,9 @@ void Controller::updateAlarms(uint32_t now) {
     }
   }
 
-  // Cửa bị mở trái phép: servo đang ở vị trí đóng một lúc mà reed switch vẫn báo hở.
-  // Mở cửa bằng lệnh hợp lệ (nhận diện, nút trên app) không tính, nhưng An ninh vẫn giữ nên PIR vẫn báo.
-  const bool doorForced = !door_.sensorClosed() && door_.closedFor(now) >= DOOR_FORCED_GRACE_MS;
+  // Cửa bị mở trái phép: servo đang ở vị trí đóng mà reed switch vẫn báo hở (trạng thái NotClosed).
+  // Mở cửa bằng lệnh hợp lệ (nhận diện, nút trên app) không tính vì lệnh đó đã tắt An ninh.
+  const bool doorForced = door_.state() == DoorState::NotClosed;
 
   // Báo trộm chỉ kéo dài khi còn chuyển động / cửa còn hở; hết INTRUSION_CLEAR_MS thì tự tắt.
   if (armed_ && timeReached(now, armActiveAt_) && (r.motion || doorForced)) {

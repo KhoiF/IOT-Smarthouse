@@ -6,6 +6,7 @@ export interface IotSensors {
   dht_ok: boolean;
   mq2_raw: number;
   mq2_ready: boolean;
+  gas_level?: "normal" | "high" | "danger";
   motion: boolean;
   pir_ready: boolean;
   is_dark: boolean;
@@ -23,7 +24,7 @@ export interface IotSecurity {
 }
 
 export interface IotDoor {
-  state: "closed" | "opening" | "open" | "closing";
+  state: "closed" | "opening" | "open" | "closing" | "not_closed";
   held_by_fire: boolean;
   sensor_closed: boolean | null;
 }

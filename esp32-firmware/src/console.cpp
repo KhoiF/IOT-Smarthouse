@@ -83,6 +83,8 @@ void Console::handleLine(char* line, uint32_t now) {
     printResult(controller_.setRelayByUser(index - 1, on == 1, now));
   } else if (strcmp(cmd, "door") == 0 && arg1 && strcmp(arg1, "open") == 0) {
     printResult(controller_.openDoorByUser(now));
+  } else if (strcmp(cmd, "door") == 0 && arg1 && strcmp(arg1, "close") == 0) {
+    printResult(controller_.closeDoorByUser(now));
   } else if (strcmp(cmd, "arm") == 0) {
     controller_.setArmed(true, now);
   } else if (strcmp(cmd, "disarm") == 0) {
@@ -90,6 +92,19 @@ void Console::handleLine(char* line, uint32_t now) {
   } else if (strcmp(cmd, "silence") == 0) {
     controller_.silenceAlarm();
     Serial.println("Da tat coi (canh bao van con hieu luc)");
+  } else if (strcmp(cmd, "mq2") == 0) {
+    // Đọc thô GPIO34 (chưa lọc) để phân biệt nhiễu điện với thay đổi thật của cảm biến.
+    uint16_t minRaw = 4095, maxRaw = 0;
+    Serial.print("MQ-2 tho (mV):");
+    for (uint8_t i = 0; i < 20; i++) {
+      const uint16_t raw = analogRead(PIN_MQ2);
+      minRaw = min(minRaw, raw);
+      maxRaw = max(maxRaw, raw);
+      Serial.printf(" %u(%u)", raw, analogReadMilliVolts(PIN_MQ2));
+      delay(50);
+    }
+    Serial.printf("\nmin=%u max=%u chenh=%u (da loc: %u)\n", minRaw, maxRaw, maxRaw - minRaw,
+                  sensors_.readings().mq2Raw);
   } else if (strcmp(cmd, "buzz") == 0 && arg1 &&
              (strcmp(arg1, "high") == 0 || strcmp(arg1, "low") == 0)) {
     // Ghi thẳng mức lên chân còi để dò mức kích; bị ghi đè khi trạng thái cảnh báo đổi.
@@ -115,11 +130,12 @@ void Console::printHelp() {
   Serial.println("  log                     bat/tat dong log moi 2 giay");
   Serial.println("  led <1-5> on|off        1=phong khach 2=phong ngu 3=nha bep 4=ban cong 5=nha tam");
   Serial.println("  relay <1-2> on|off      1=quat 2=den");
-  Serial.println("  door open               mo cua (tu dong sau 5 giay)");
+  Serial.println("  door open | door close  mo cua / dong cua");
   Serial.println("  arm | disarm            bat/tat che do An ninh");
   Serial.println("  silence                 tat coi dang keu");
   Serial.println("  sim gas on|off          gia lap MQ-2 vuot nguong (khong can khoi that)");
   Serial.println("  buzz high|low           ghi thang muc len chan coi (do muc kich)");
+  Serial.println("  mq2                     doc tho 20 mau MQ-2 (kiem tra nhieu)");
 }
 
 void Console::printStatus(uint32_t now) {
@@ -131,8 +147,9 @@ void Console::printStatus(uint32_t now) {
   } else {
     Serial.println("DHT11      : loi doc");
   }
-  Serial.printf("MQ-2       : %u%s (bao >= %.0f, het <= %.0f)\n", r.mq2Raw,
-                r.mq2Ready ? "" : " [dang warm-up]", MQ2_ALARM_ON, MQ2_ALARM_OFF);
+  Serial.printf("MQ-2       : %u%s (cao >= %.0f, bao chay >= %.0f trong %lus, het <= %.0f)\n", r.mq2Raw,
+                r.mq2Ready ? "" : " [dang warm-up]", MQ2_WARNING_LEVEL, MQ2_ALARM_ON,
+                (unsigned long)(MQ2_ALARM_CONFIRM_MS / 1000), MQ2_ALARM_OFF);
   Serial.printf("Anh sang   : %s (DO=%d, toi khi DO=%d)\n", r.isDark ? "TOI" : "sang",
                 digitalRead(PIN_LDR_DO), LDR_DARK_LEVEL);
   Serial.printf("Chuyen dong: %s%s\n", r.motion ? "CO" : "khong",
@@ -185,6 +202,9 @@ void Console::printResult(CommandResult result) {
       break;
     case CommandResult::BlockedByFire:
       Serial.println("Loi: dang canh bao chay, khong bat relay");
+      break;
+    case CommandResult::DoorHeldByFire:
+      Serial.println("Loi: dang canh bao chay, cua duoc giu mo de thoat hiem");
       break;
   }
 }

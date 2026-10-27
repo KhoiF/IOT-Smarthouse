@@ -1,4 +1,4 @@
-"""Danh sách phòng và relay dùng chung với firmware (esp32-firmware/include/config.h), web và Android."""
+"""Danh sách phòng và relay dùng chung với firmware (esp32-firmware/include/config.h), web và iOS."""
 
 from __future__ import annotations
 

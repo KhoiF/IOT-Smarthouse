@@ -8,7 +8,7 @@
 constexpr const char* FIRMWARE_VERSION = "0.1.0";
 
 // ---------------------------------------------------------------------------
-// LED: thứ tự là thứ tự phòng, id dùng chung với backend/web/Android.
+// LED: thứ tự là thứ tự phòng, id dùng chung với backend/web/iOS.
 // ---------------------------------------------------------------------------
 constexpr uint8_t LED_COUNT = 5;
 constexpr uint8_t LED_PINS[LED_COUNT] = {18, 19, 21, 22, 23};
@@ -44,9 +44,10 @@ constexpr uint8_t PIN_DOOR_SENSOR = 16;      // INPUT_PULLUP: nam châm sát (c�
 constexpr bool DOOR_SENSOR_ENABLED = false;
 constexpr uint8_t DOOR_CLOSED_ANGLE = 0;
 constexpr uint8_t DOOR_OPEN_ANGLE = 90;
-constexpr uint32_t DOOR_OPEN_MS = 5000;      // tự đóng sau 5 giây
+// 0 = không tự đóng: cửa mở tới khi có lệnh đóng (nút hoặc giọng nói). Đặt > 0 (ms) để tự đóng.
+constexpr uint32_t DOOR_AUTO_CLOSE_MS = 0;
 constexpr uint32_t DOOR_MOVE_MS = 700;       // thời gian servo quay xong, sau đó ngắt xung
-constexpr uint32_t DOOR_FORCED_GRACE_MS = 1500;  // cửa đã đóng mà reed vẫn hở quá lâu mới tính là bị mở
+constexpr uint32_t DOOR_NOT_CLOSED_MS = 3000;  // servo đã về vị trí đóng mà reed vẫn hở quá 3 giây -> "chưa đóng hẳn"
 constexpr uint16_t SERVO_MIN_US = 500;       // xung ứng với 0°
 constexpr uint16_t SERVO_MAX_US = 2400;      // xung ứng với 180°
 
@@ -79,10 +80,13 @@ constexpr uint32_t ARM_EXIT_DELAY_MS = 2000;      // thời gian chờ sau khi b
 // ---------------------------------------------------------------------------
 // Ngưỡng
 // ---------------------------------------------------------------------------
-// MQ-2 đang cấp 3V3 và chưa hiệu chuẩn: đo giá trị nền bằng lệnh `status`
-// rồi chỉnh lại. Đổi sang 5 V + chia áp thì phải đo lại toàn bộ.
-constexpr float MQ2_ALARM_ON = 3600;
-constexpr float MQ2_ALARM_OFF = 3300;
+// MQ-2 (giá trị ADC đã lọc, 0..4095), mức do người dùng chốt:
+//   < 1600 bình thường; 1600..2499 cao (chỉ cảnh báo trên app); >= 2500 nguy hiểm -> báo cháy.
+// MQ-2 đang cấp 3V3; đổi sang 5 V + chia áp thì phải đo và chỉnh lại.
+constexpr float MQ2_WARNING_LEVEL = 1600;
+constexpr float MQ2_ALARM_ON = 2500;
+constexpr float MQ2_ALARM_OFF = 2200;            // hết báo cháy khi xuống dưới mức này
+constexpr uint32_t MQ2_ALARM_CONFIRM_MS = 3000;  // phải vượt MQ2_ALARM_ON liên tục 3 giây mới báo cháy
 constexpr float MQ2_FILTER_ALPHA = 0.1f;  // lọc trung bình mũ cho ADC
 
 // DHT11 chỉ đo tới khoảng 50 °C.

@@ -1,8 +1,8 @@
 """Quyết định mở cửa từ kết quả nhận diện khuôn mặt và ghi nhật ký cửa.
 
 Cửa chỉ mở khi cùng một thành viên được nhận ra ở FACE_CONFIRM_FRAMES khung hình trong
-FACE_CONFIRM_WINDOW_SECONDS, để một khung hình nhận nhầm không mở được cửa. Mở cửa không
-tắt chế độ An ninh.
+FACE_CONFIRM_WINDOW_SECONDS, để một khung hình nhận nhầm không mở được cửa. Mở cửa hợp lệ
+(nhận diện hoặc nút) thì ESP32 tự tắt chế độ An ninh.
 """
 
 from __future__ import annotations
@@ -51,6 +51,11 @@ class DoorService:
         if confirmed < settings.face_confirm_frames:
             return {"action": "confirming", "name": best["name"], "frames": confirmed}
 
+        # Cửa không tự đóng: đang mở thì không gửi lệnh/ghi nhật ký lặp lại khi người còn đứng trước camera.
+        if self._iot.door_state() in ("open", "opening"):
+            self._hits.clear()
+            return {"action": "already_open", "name": best["name"]}
+
         if now - self._last_open_at < settings.door_open_cooldown_seconds:
             return {"action": "cooldown", "name": best["name"]}
 
@@ -60,14 +65,31 @@ class DoorService:
     async def open_door(
         self, source: str, name: Optional[str] = None, similarity: Optional[float] = None
     ) -> Dict[str, Any]:
+        was_armed = self._iot.is_armed()
         try:
             await self._iot.open_door()
         except IoTError as error:
             self._append_log("open_failed", name, similarity, error.message)
             return {"action": "error", "name": name, "message": error.message}
         self._last_open_at = time.time()
-        self._append_log("face_open" if source == "face" else "manual_open", name, similarity)
-        return {"action": "opened", "name": name}
+        disarmed = was_armed and not self._iot.is_armed()
+        self._append_log(
+            "face_open" if source == "face" else "manual_open",
+            name,
+            similarity,
+            "đã tắt An ninh" if disarmed else None,
+        )
+        return {"action": "opened", "name": name, "disarmed": disarmed}
+
+    async def close_door(self, source: str) -> Dict[str, Any]:
+        """source: "manual" (nút trên ứng dụng) hoặc "voice" (trợ lý giọng nói)."""
+        try:
+            await self._iot.close_door()
+        except IoTError as error:
+            self._append_log("close_failed", None, None, error.message)
+            return {"action": "error", "message": error.message}
+        self._append_log("voice_close" if source == "voice" else "manual_close", None, None)
+        return {"action": "closed"}
 
     def recent_log(self, limit: int = 20) -> List[Dict[str, Any]]:
         return list(reversed(self._log[-limit:]))
@@ -76,16 +98,22 @@ class DoorService:
         if not self._log:
             return None
         entry = self._log[-1]
-        return {
+        summary = {
             "event": {
                 "face_open": "mở cửa bằng nhận diện khuôn mặt",
                 "manual_open": "mở cửa bằng nút trên ứng dụng",
                 "stranger": "người lạ đứng trước camera, không mở cửa",
                 "open_failed": "mở cửa thất bại",
+                "manual_close": "đóng cửa bằng nút trên ứng dụng",
+                "voice_close": "đóng cửa bằng giọng nói",
+                "close_failed": "đóng cửa thất bại",
             }.get(entry["event"], entry["event"]),
             "name": entry.get("name"),
             "seconds_ago": round(time.time() - entry["t"]),
         }
+        if entry.get("message"):
+            summary["note"] = entry["message"]
+        return summary
 
     def _append_log(
         self, event: str, name: Optional[str], similarity: Optional[float], message: Optional[str] = None
