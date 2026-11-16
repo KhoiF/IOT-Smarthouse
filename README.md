@@ -49,7 +49,7 @@ ESP32 DevKit V1, breadboard, 5 LED + điện trở 220–330 Ω, DHT11, PIR HC-S
 | LDR (DO) | GPIO 35 | 3V3 |
 | Còi | GPIO 27 | 3V3 |
 | Relay 1 (quạt) / Relay 2 (đèn phụ) | GPIO 25 / 26 | 5V (VIN) |
-| Servo cửa | GPIO 13 | 5V (VIN + tụ 470 µF, hoặc adapter riêng) |
+| Servo cửa | GPIO 13 | 5V (VIN), không bắt buộc tụ; xem mục 4.8 hướng dẫn đấu nối |
 | Reed switch cửa | GPIO 16 (chân kia nối GND) | – |
 
 Cách đấu chi tiết, kiểm tra trước khi cấp nguồn và cách thử từng khối: **[HUONG_DAN_DAU_NOI.md](HUONG_DAN_DAU_NOI.md)**. Không đưa tín hiệu 5 V vào GPIO và không đấu điện lưới 220 V vào mô hình.
