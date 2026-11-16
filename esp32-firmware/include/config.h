@@ -42,8 +42,8 @@ constexpr uint8_t PIN_DOOR_SERVO = 13;
 constexpr uint8_t PIN_DOOR_SENSOR = 16;      // INPUT_PULLUP: nam châm sát (cửa đóng) = LOW
 // Bật khi đã lắp reed switch; chân bỏ trống sẽ đọc HIGH (cửa mở) và gây báo trộm giả.
 constexpr bool DOOR_SENSOR_ENABLED = false;
-constexpr uint8_t DOOR_CLOSED_ANGLE = 0;
-constexpr uint8_t DOOR_OPEN_ANGLE = 90;
+constexpr uint8_t DOOR_CLOSED_ANGLE = 90;  // đảo chiều: vị trí 90° là cửa đóng
+constexpr uint8_t DOOR_OPEN_ANGLE = 180;   // mở ra ngoài: quay từ 90° lên 180°
 // 0 = không tự đóng: cửa mở tới khi có lệnh đóng (nút hoặc giọng nói). Đặt > 0 (ms) để tự đóng.
 constexpr uint32_t DOOR_AUTO_CLOSE_MS = 0;
 constexpr uint32_t DOOR_MOVE_MS = 700;       // thời gian servo quay xong, sau đó ngắt xung
