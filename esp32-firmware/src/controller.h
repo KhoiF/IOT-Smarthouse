@@ -13,7 +13,8 @@ enum class CommandResult : uint8_t { Ok, InvalidTarget, BlockedByFire, DoorHeldB
 // Logic chạy cục bộ trên ESP32, không phụ thuộc mạng:
 // - Cháy (MQ-2 hoặc nhiệt độ): còi kiểu Fire, ngắt cả hai relay.
 // - An ninh BẬT: PIR phát hiện chuyển động -> báo trộm, hết chuyển động thì còi tự tắt.
-// - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, hết chuyển động thì tắt.
+// - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, hết chuyển động thì tắt; đèn bật bằng
+//   lệnh tay thì không tự tắt.
 // - Trời tối -> bật LED ban công. Nhiệt độ cao -> bật quạt (relay 1).
 // - Báo trộm bắt đầu/kết thúc -> bật/tắt đèn phụ (relay 2).
 // - Cửa: mở theo lệnh (kèm tắt An ninh), đóng theo lệnh; cháy -> mở để thoát hiểm (giữ An ninh);
@@ -60,9 +61,10 @@ class Controller {
   void updateAutomation(uint32_t now);
   void applyBuzzer();
   void applyAutomated(bool isRelay, uint8_t index, bool autoValue, uint32_t now);
+  void applyLivingLight();
   static void setOverride(Override& o, bool value, uint32_t now);
   static bool isAutomatedLed(uint8_t index) {
-    return index == LED_PHONG_KHACH || index == LED_BAN_CONG;
+    return index == LED_BAN_CONG;
   }
   void event(const char* message);
 
@@ -87,7 +89,8 @@ class Controller {
   bool doorForced_ = false;
   DoorState lastDoorState_ = DoorState::Closed;
 
-  bool livingAutoOn_ = false;
+  bool livingAutoOn_ = false;     // điều kiện tự động: tối + chuyển động, chưa hết thời gian chờ
+  bool livingLightAuto_ = false;  // LED phòng khách đang sáng do tự động hóa bật
   uint32_t lastMotionAt_ = 0;
   bool fanAutoOn_ = false;
   bool alarmLightOn_ = false;

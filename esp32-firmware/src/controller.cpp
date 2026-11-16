@@ -127,7 +127,7 @@ void Controller::updateAutomation(uint32_t now) {
   const SensorReadings& r = sensors_.readings();
 
   // An ninh TẮT: trời tối và có chuyển động -> bật đèn phòng khách; PIR hết báo chuyển động
-  // LIVING_LIGHT_OFF_DELAY_MS thì tắt. Chỉ xét LDR lúc bật: khi đèn đã sáng, ánh sáng của
+  // LIVING_LIGHT_OFF_DELAY_MS thì tắt (chỉ khi đèn do tự động hóa bật, xem applyLivingLight). Chỉ xét LDR lúc bật: khi đèn đã sáng, ánh sáng của
   // chính các LED có thể làm LDR báo "sáng" và làm đèn tắt dù người vẫn còn đó.
   if (armed_) {
     livingAutoOn_ = false;
@@ -152,7 +152,7 @@ void Controller::updateAutomation(uint32_t now) {
     }
   }
 
-  applyAutomated(false, LED_PHONG_KHACH, livingAutoOn_, now);
+  applyLivingLight();
   applyAutomated(false, LED_BAN_CONG, r.isDark, now);
   if (!fireAlarm()) applyAutomated(true, RELAY_FAN, fanAutoOn_, now);
 }
@@ -181,6 +181,28 @@ void Controller::applyAutomated(bool isRelay, uint8_t index, bool autoValue, uin
   changed_ = true;
 }
 
+void Controller::applyLivingLight() {
+  // Chỉ bật lúc điều kiện vừa xuất hiện (tối + chuyển động) và chỉ tắt đèn do chính tự động hóa
+  // bật. Đèn bật bằng lệnh tay giữ nguyên tới khi người dùng tắt; tắt bằng lệnh tay thì phải chờ
+  // lần chuyển động kế tiếp mới tự bật lại.
+  bool& lastAuto = ledLastAuto_[LED_PHONG_KHACH];
+  const bool started = livingAutoOn_ && !lastAuto;
+  lastAuto = livingAutoOn_;
+
+  const bool on = outputs_.led(LED_PHONG_KHACH);
+  if (started && !on) {
+    outputs_.setLed(LED_PHONG_KHACH, true);
+    livingLightAuto_ = true;
+    changed_ = true;
+  } else if (!livingAutoOn_ && livingLightAuto_) {
+    livingLightAuto_ = false;
+    if (on) {
+      outputs_.setLed(LED_PHONG_KHACH, false);
+      changed_ = true;
+    }
+  }
+}
+
 void Controller::applyBuzzer() {
   BuzzerPattern pattern = BuzzerPattern::Off;
   if (fireAlarm() && !fireSilenced_) {
@@ -196,6 +218,7 @@ void Controller::applyBuzzer() {
 
 CommandResult Controller::setLedByUser(uint8_t index, bool on, uint32_t now) {
   if (index >= LED_COUNT) return CommandResult::InvalidTarget;
+  if (index == LED_PHONG_KHACH) livingLightAuto_ = false;
   if (isAutomatedLed(index)) setOverride(ledOverrides_[index], on, now);
   if (outputs_.led(index) != on) changed_ = true;
   outputs_.setLed(index, on);
