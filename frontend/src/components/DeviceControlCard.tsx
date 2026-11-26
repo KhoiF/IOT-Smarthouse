@@ -52,10 +52,10 @@ export function DeviceControlCard({
               </p>
               <p className="text-sm text-foreground">
                 {alarms.fire
-                  ? `${alarms.gas ? "Cảm biến khói/gas vượt ngưỡng" : "Nhiệt độ quá cao"}${alarms.gas_simulated ? " (giả lập)" : ""}. Đã ngắt quạt và đèn phụ.`
+                  ? `${alarms.gas ? "Cảm biến khói/gas vượt ngưỡng" : "Nhiệt độ quá cao"}${alarms.gas_simulated ? " (giả lập)" : ""}. Đã ngắt điều hòa, bật quạt thông gió.`
                   : alarms.door_forced
-                    ? "Cửa bị mở trái phép khi đang bật An ninh. Đã bật đèn phụ."
-                    : "Cảm biến chuyển động phát hiện người khi đang bật An ninh. Đã bật đèn phụ."}
+                    ? "Cửa bị mở trái phép khi đang bật An ninh."
+                    : "Cảm biến chuyển động phát hiện người khi đang bật An ninh."}
               </p>
               {alarms.silenced && <p className="text-xs text-muted-foreground">Đã tắt còi, cảnh báo vẫn còn hiệu lực.</p>}
             </div>
@@ -74,8 +74,8 @@ export function DeviceControlCard({
               {security?.armed
                 ? security.arming
                   ? "Đang kích hoạt…"
-                  : "Đang bật: phát hiện chuyển động sẽ hú còi báo trộm."
-                : "Đang tắt: cảm biến chuyển động dùng để tự bật đèn phòng khách."}
+                  : "Đang bật: phát hiện chuyển động sẽ hú còi báo trộm (trời tối thì vẫn tự bật đèn phòng khách)."
+                : "Đang tắt: chuyển động chỉ dùng để tự bật đèn phòng khách khi trời tối."}
             </p>
           </div>
           <Toggle

@@ -37,6 +37,14 @@ export default function App() {
     currentSong,
     sortedLibrary,
     handleMusicSubmit,
+    suggestions,
+    playSong,
+    seekTo,
+    seekBy,
+    togglePlayPause,
+    handleAudioSeeked,
+    audioDuration,
+    setAudioDuration,
     handleMusicPause,
     handleMusicPlay,
     setLiveMusicPosition,
@@ -118,6 +126,18 @@ export default function App() {
             musicTitle={musicTitle}
             onMusicTitleChange={setMusicTitle}
             onSubmit={handleMusicSubmit}
+            suggestions={suggestions}
+            onPlaySong={(title) => {
+              void playSong(title, true);
+            }}
+            audioDuration={audioDuration}
+            onAudioDurationChange={setAudioDuration}
+            onSeek={(seconds) => {
+              void seekTo(seconds);
+            }}
+            onSeekBy={seekBy}
+            onTogglePlayPause={togglePlayPause}
+            onAudioSeeked={handleAudioSeeked}
             audioPlayerRef={audioPlayerRef}
             currentSong={currentSong}
             sortedLibrary={sortedLibrary}

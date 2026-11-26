@@ -19,8 +19,8 @@ enum Catalog {
     ]
 
     static let relays: [SwitchInfo] = [
-        SwitchInfo(id: "relay1", name: "Quạt", symbol: "fan", automation: "Tự bật khi ≥ 33 °C, tắt khi ≤ 31 °C"),
-        SwitchInfo(id: "relay2", name: "Đèn phụ", symbol: "lamp.desk", automation: "Tự bật khi có báo trộm"),
+        SwitchInfo(id: "relay1", name: "Điều hòa", symbol: "air.conditioner.horizontal", automation: "Tự bật khi > 33 °C, không tự tắt"),
+        SwitchInfo(id: "relay2", name: "Quạt", symbol: "fan", automation: "Tự bật khi có khí gas hoặc báo cháy"),
     ]
 
     static let manualOverrideNote = "Lệnh tay giữ ưu tiên 5 phút, sau đó tự động hóa chạy lại."

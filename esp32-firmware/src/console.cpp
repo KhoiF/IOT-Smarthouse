@@ -129,7 +129,7 @@ void Console::printHelp() {
   Serial.println("  status                  in toan bo trang thai");
   Serial.println("  log                     bat/tat dong log moi 2 giay");
   Serial.println("  led <1-5> on|off        1=phong khach 2=phong ngu 3=nha bep 4=ban cong 5=nha tam");
-  Serial.println("  relay <1-2> on|off      1=quat 2=den");
+  Serial.println("  relay <1-2> on|off      1=dieu hoa 2=quat");
   Serial.println("  door open | door close  mo cua / dong cua");
   Serial.println("  arm | disarm            bat/tat che do An ninh");
   Serial.println("  silence                 tat coi dang keu");
@@ -160,7 +160,7 @@ void Console::printStatus(uint32_t now) {
                   controller_.overrideActive(false, i, now) ? " (lenh tay)" : "");
   }
   for (uint8_t i = 0; i < RELAY_COUNT; i++) {
-    Serial.printf("Relay %u %-9s: %s%s\n", i + 1, i == RELAY_FAN ? "quat" : "den",
+    Serial.printf("Relay %u %-9s: %s%s\n", i + 1, i == RELAY_AC ? "dieu hoa" : "quat",
                   onOff(outputs_.relay(i)),
                   controller_.overrideActive(true, i, now) ? " (lenh tay)" : "");
   }

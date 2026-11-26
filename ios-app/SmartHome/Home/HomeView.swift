@@ -64,12 +64,12 @@ struct HomeView: View {
     private func alarmDescription(_ alarms: IotAlarms) -> String {
         if alarms.fire {
             let cause = alarms.gas ? "Cảm biến khói/gas vượt ngưỡng" : "Nhiệt độ quá cao"
-            return "\(cause)\(alarms.gasSimulated ? " (giả lập)" : ""). Đã ngắt quạt và đèn phụ."
+            return "\(cause)\(alarms.gasSimulated ? " (giả lập)" : ""). Đã ngắt điều hòa, bật quạt thông gió."
         }
         if alarms.doorForced == true {
-            return "Cửa bị mở trái phép khi đang bật An ninh. Đã bật đèn phụ."
+            return "Cửa bị mở trái phép khi đang bật An ninh."
         }
-        return "Cảm biến chuyển động phát hiện người khi đang bật An ninh. Đã bật đèn phụ."
+        return "Cảm biến chuyển động phát hiện người khi đang bật An ninh."
     }
 
     private var securitySection: some View {

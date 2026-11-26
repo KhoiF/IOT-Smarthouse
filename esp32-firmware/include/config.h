@@ -19,12 +19,12 @@ constexpr uint8_t LED_PHONG_KHACH = 0;
 constexpr uint8_t LED_BAN_CONG = 3;
 
 // ---------------------------------------------------------------------------
-// Relay: relay 1 = quạt 5 V, relay 2 = đèn 3,3 V.
+// Relay: relay 1 = điều hòa (mô phỏng), relay 2 = quạt thông gió.
 // ---------------------------------------------------------------------------
 constexpr uint8_t RELAY_COUNT = 2;
 constexpr uint8_t RELAY_PINS[RELAY_COUNT] = {25, 26};
-constexpr uint8_t RELAY_FAN = 0;
-constexpr uint8_t RELAY_ALARM_LIGHT = 1;  // đèn phụ: bật khi có báo trộm
+constexpr uint8_t RELAY_AC = 0;   // điều hòa: tự bật khi nóng, không tự tắt
+constexpr uint8_t RELAY_FAN = 1;  // quạt thông gió: tự bật khi có khí gas / báo cháy
 // Phần lớn module relay kích mức thấp. Đổi thành false nếu relay đóng khi IN = HIGH.
 constexpr bool RELAY_ACTIVE_LOW = true;
 
@@ -73,6 +73,7 @@ constexpr uint32_t PIR_WARMUP_MS = 60000;    // PIR báo sai trong lúc khởi �
 constexpr uint32_t LDR_DEBOUNCE_MS = 2000;   // DO dao động khi sáng gần ngưỡng
 
 constexpr uint32_t LIVING_LIGHT_OFF_DELAY_MS = 3000;  // PIR hết báo chuyển động 3 giây thì tắt LED phòng khách
+constexpr uint32_t LIVING_MANUAL_OFF_HOLD_MS = 30000;  // tắt tay LED phòng khách: chặn tự bật lại trong 30 giây
 constexpr uint32_t USER_OVERRIDE_MS = 300000;     // lệnh tay/AI giữ ưu tiên 5 phút
 constexpr uint32_t INTRUSION_CLEAR_MS = 2000;     // hết chuyển động 2 giây thì tắt còi báo trộm
 constexpr uint32_t ARM_EXIT_DELAY_MS = 2000;      // thời gian chờ sau khi bật An ninh trước khi PIR được xét
@@ -80,12 +81,12 @@ constexpr uint32_t ARM_EXIT_DELAY_MS = 2000;      // thời gian chờ sau khi b
 // ---------------------------------------------------------------------------
 // Ngưỡng
 // ---------------------------------------------------------------------------
-// MQ-2 (giá trị ADC đã lọc, 0..4095), mức do người dùng chốt:
-//   < 1600 bình thường; 1600..2499 cao (chỉ cảnh báo trên app); >= 2500 nguy hiểm -> báo cháy.
-// MQ-2 đang cấp 3V3; đổi sang 5 V + chia áp thì phải đo và chỉnh lại.
-constexpr float MQ2_WARNING_LEVEL = 1600;
-constexpr float MQ2_ALARM_ON = 2500;
-constexpr float MQ2_ALARM_OFF = 2200;            // hết báo cháy khi xuống dưới mức này
+// MQ-2 (giá trị ADC đã lọc, 0..4095). Nền đo trong không khí sạch (26/11/2026, cấp 3V3): ~110..400.
+//   < 800 bình thường; 800..1799 cao (cảnh báo trên app + bật quạt); >= 1800 nguy hiểm -> báo cháy.
+// Đổi nguồn/đấu dây MQ-2 thì đo lại nền bằng lệnh Serial `mq2` rồi chỉnh các ngưỡng này.
+constexpr float MQ2_WARNING_LEVEL = 800;
+constexpr float MQ2_ALARM_ON = 1800;
+constexpr float MQ2_ALARM_OFF = 1500;            // hết báo cháy khi xuống dưới mức này
 constexpr uint32_t MQ2_ALARM_CONFIRM_MS = 3000;  // phải vượt MQ2_ALARM_ON liên tục 3 giây mới báo cháy
 constexpr float MQ2_FILTER_ALPHA = 0.1f;  // lọc trung bình mũ cho ADC
 
@@ -93,9 +94,14 @@ constexpr float MQ2_FILTER_ALPHA = 0.1f;  // lọc trung bình mũ cho ADC
 constexpr float TEMP_FIRE_ON_C = 45.0f;
 constexpr float TEMP_FIRE_OFF_C = 42.0f;
 
-// Quạt tự động. Phòng đang khoảng 31 °C nên ngưỡng 30 °C sẽ làm quạt chạy liên tục.
-constexpr float FAN_ON_C = 33.0f;
-constexpr float FAN_OFF_C = 31.0f;
+// Điều hòa tự bật khi nhiệt độ vượt AC_ON_C và không tự tắt. Nhiệt độ phải xuống tới AC_REARM_C
+// thì lần nóng kế tiếp mới tự bật lại (tắt tay lúc đang nóng thì không bị bật lại ngay).
+constexpr float AC_ON_C = 33.0f;
+constexpr float AC_REARM_C = 31.0f;
+
+// Quạt thông gió: bật khi MQ-2 >= MQ2_WARNING_LEVEL (mức "cao") hoặc đang báo cháy; tắt khi gas
+// xuống dưới MQ2_FAN_OFF và hết báo cháy.
+constexpr float MQ2_FAN_OFF = 650;
 
 // ---------------------------------------------------------------------------
 // Còi (ms bật / ms tắt)

@@ -11,12 +11,14 @@
 enum class CommandResult : uint8_t { Ok, InvalidTarget, BlockedByFire, DoorHeldByFire };
 
 // Logic chạy cục bộ trên ESP32, không phụ thuộc mạng:
-// - Cháy (MQ-2 hoặc nhiệt độ): còi kiểu Fire, ngắt cả hai relay.
+// - Cháy (MQ-2 hoặc nhiệt độ): còi kiểu Fire, ngắt điều hòa (relay 1), bật quạt thông gió (relay 2).
 // - An ninh BẬT: PIR phát hiện chuyển động -> báo trộm, hết chuyển động thì còi tự tắt.
-// - An ninh TẮT: tối + chuyển động -> bật LED phòng khách, hết chuyển động thì tắt; đèn bật bằng
+// - Tối + chuyển động (An ninh bật hay tắt) -> bật LED phòng khách, hết chuyển động thì tắt; tắt tay thì
+//   chặn tự bật lại 30 giây; đèn bật bằng
 //   lệnh tay thì không tự tắt.
-// - Trời tối -> bật LED ban công. Nhiệt độ cao -> bật quạt (relay 1).
-// - Báo trộm bắt đầu/kết thúc -> bật/tắt đèn phụ (relay 2).
+// - Trời tối -> bật LED ban công.
+// - Nhiệt độ > AC_ON_C -> bật điều hòa (relay 1), không tự tắt.
+// - Khí gas mức cao hoặc báo cháy -> bật quạt thông gió (relay 2), hết thì tắt.
 // - Cửa: mở theo lệnh (kèm tắt An ninh), đóng theo lệnh; cháy -> mở để thoát hiểm (giữ An ninh);
 //   cửa bị mở trái phép khi An ninh bật -> báo trộm.
 // - Lệnh tay/AI trên đầu ra tự động giữ ưu tiên USER_OVERRIDE_MS hoặc tới khi cảm biến đổi trạng thái.
@@ -61,7 +63,7 @@ class Controller {
   void updateAutomation(uint32_t now);
   void applyBuzzer();
   void applyAutomated(bool isRelay, uint8_t index, bool autoValue, uint32_t now);
-  void applyLivingLight();
+  void applyLivingLight(uint32_t now);
   static void setOverride(Override& o, bool value, uint32_t now);
   static bool isAutomatedLed(uint8_t index) {
     return index == LED_BAN_CONG;
@@ -91,9 +93,12 @@ class Controller {
 
   bool livingAutoOn_ = false;     // điều kiện tự động: tối + chuyển động, chưa hết thời gian chờ
   bool livingLightAuto_ = false;  // LED phòng khách đang sáng do tự động hóa bật
+  bool livingManualOff_ = false;  // vừa tắt tay: chặn tự bật tới livingManualOffUntil_ hoặc hết chuyển động
+  uint32_t livingManualOffUntil_ = 0;
   uint32_t lastMotionAt_ = 0;
-  bool fanAutoOn_ = false;
-  bool alarmLightOn_ = false;
+  bool acHot_ = false;     // đang nóng (> AC_ON_C), chờ xuống AC_REARM_C để xét lần nóng kế tiếp
+  bool acPending_ = false; // vừa nóng nhưng chưa bật được (đang cháy)
+  bool fanGas_ = false;    // MQ-2 ở mức cao (có hysteresis)
 
   Override ledOverrides_[LED_COUNT];
   Override relayOverrides_[RELAY_COUNT];

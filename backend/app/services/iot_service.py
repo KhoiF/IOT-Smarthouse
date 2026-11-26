@@ -48,7 +48,7 @@ class CommandRejectedError(IoTError):
     status_code = 409
 
     _MESSAGES = {
-        "blocked_by_fire": "Đang có cảnh báo cháy, không thể bật relay",
+        "blocked_by_fire": "Đang có cảnh báo cháy, không thể bật điều hòa",
         "invalid_target": "Thiết bị không hợp lệ",
         "door_disabled": "ESP32 chưa bật chức năng cửa",
         "door_held_by_fire": "Đang có cảnh báo cháy, cửa được giữ mở để thoát hiểm",
@@ -113,11 +113,11 @@ class IoTService:
         if not sensors.get("mq2_ready"):
             gas_status = "cảm biến đang khởi động"
         elif alarms.get("gas") or sensors.get("gas_level") == "danger":
-            gas_status = "nguy hiểm (từ 2500), đang báo cháy"
+            gas_status = "nguy hiểm (từ 1800), đang báo cháy"
         elif sensors.get("gas_level") == "high":
-            gas_status = "cao (1600–2499), chưa tới mức báo cháy"
+            gas_status = "cao (800–1799), chưa tới mức báo cháy"
         else:
-            gas_status = "bình thường (dưới 1600)"
+            gas_status = "bình thường (dưới 800)"
 
         active_alarms = []
         if alarms.get("fire"):

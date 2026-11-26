@@ -9,7 +9,8 @@ bool timeReached(uint32_t now, uint32_t at) { return (int32_t)(now - at) >= 0; }
 void Sensors::begin(uint32_t now) {
   bootAt_ = now;
 
-  pinMode(PIN_PIR, INPUT);
+  // Kéo xuống: dây OUT của PIR lỏng/đứt thì đọc LOW (không chuyển động) thay vì thả nổi báo sai.
+  pinMode(PIN_PIR, INPUT_PULLDOWN);
   pinMode(PIN_LDR_DO, INPUT);
   pinMode(PIN_MQ2, INPUT);
   analogReadResolution(12);

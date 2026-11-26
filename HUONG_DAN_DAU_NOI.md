@@ -120,9 +120,9 @@ Ngưỡng hiện tại (giá trị ADC đã lọc, đặt trong `config.h`):
 
 | Giá trị MQ-2 | Mức | Hệ thống |
 |---|---|---|
-| < 1600 | Bình thường | – |
-| 1600 – 2499 | Cao | Web hiện cảnh báo vàng, chưa hú còi |
-| ≥ 2500 liên tục 3 giây | Nguy hiểm | Báo cháy (còi, ngắt relay, mở cửa); hết khi xuống ≤ 2200 |
+| < 800 | Bình thường | – (quạt tắt khi xuống dưới 650) |
+| 800 – 1799 | Cao | Web hiện cảnh báo vàng, bật quạt thông gió, chưa hú còi |
+| ≥ 1800 liên tục 3 giây | Nguy hiểm | Báo cháy (còi, ngắt điều hòa, bật quạt, mở cửa); hết khi xuống ≤ 1500 |
 
 Nếu giá trị nhảy loạn giữa các lần đo (ví dụ 0 rồi 1500 rồi 20 chỉ trong vài giây) thì tín hiệu AO đang bị nhiễu: kiểm tra dây AO → D34, GND chung, và dùng lệnh Serial `mq2` để xem 20 mẫu thô liên tiếp.
 
@@ -250,7 +250,7 @@ ESP32 GPIO13 ──────────────► servo cam (tín hiệ
 - Serial Monitor có in lại dòng khởi động (`Nha thong minh - firmware…`) hoặc `Brownout detector was triggered` không?
 - Web có báo **ESP32 offline** rồi online lại đúng lúc cửa quay không? Log backend có `lý do khởi động gần nhất: brownout` không?
 
-Không thấy dấu hiệu nào thì **dùng tiếp không tụ**. Giá trị MQ-2 có thể nhích lên một chút lúc servo quay; firmware chỉ báo cháy khi MQ-2 ≥ 2500 liên tục 3 giây nên không gây báo cháy giả.
+Không thấy dấu hiệu nào thì **dùng tiếp không tụ**. Giá trị MQ-2 có thể nhích lên một chút lúc servo quay; firmware chỉ báo cháy khi MQ-2 ≥ 1800 liên tục 3 giây nên không gây báo cháy giả.
 
 Nếu ESP32 khởi động lại khi cửa quay, chọn một trong hai cách:
 - Cắm thêm **tụ hóa 470–1000 µF, từ 10 V trở lên** giữa 5V và GND sát servo (chân dài/+ vào 5V, chân có vạch trắng/− vào GND).

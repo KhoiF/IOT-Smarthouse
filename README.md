@@ -8,14 +8,14 @@ ESP32 nói chuyện trực tiếp với backend bằng HTTP và WebSocket trong 
 
 | Nhóm | Chức năng |
 |---|---|
-| **Điều khiển** | Bật/tắt 5 đèn (Phòng khách, Phòng ngủ, Nhà bếp, Ban công, Nhà tắm), quạt (relay 1), đèn phụ (relay 2) từ Web hoặc giọng nói. Giao diện chỉ báo "đã làm" khi ESP32 xác nhận (ACK) |
+| **Điều khiển** | Bật/tắt 5 đèn (Phòng khách, Phòng ngủ, Nhà bếp, Ban công, Nhà tắm), điều hòa (relay 1), quạt (relay 2) từ Web hoặc giọng nói. Giao diện chỉ báo "đã làm" khi ESP32 xác nhận (ACK) |
 | **Giám sát** | Nhiệt độ, độ ẩm (DHT11), sáng/tối (LDR), chuyển động (PIR), khói/gas (MQ-2), trạng thái ESP32 online/offline; biểu đồ nhiệt độ/độ ẩm 1 giờ gần nhất |
-| **An ninh** | Bật chế độ An ninh → có chuyển động thì hú còi và bật đèn phụ, hết chuyển động thì tự tắt; cửa bị mở trái phép cũng báo trộm |
-| **Báo cháy** | MQ-2 vượt ngưỡng hoặc nhiệt độ quá cao → còi, cảnh báo trên Web, ngắt cả hai relay, mở cửa thoát hiểm |
-| **Tự động hóa** | Trời tối → bật đèn Ban công; tối + có người (An ninh tắt) → bật đèn Phòng khách, hết chuyển động 3 giây thì tắt; nóng ≥ 33 °C → bật quạt. Lệnh tay giữ ưu tiên tới khi cảm biến đổi trạng thái (tối đa 5 phút) |
+| **An ninh** | Bật chế độ An ninh → có chuyển động thì hú còi, hết chuyển động thì tự tắt; cửa bị mở trái phép cũng báo trộm |
+| **Báo cháy** | MQ-2 vượt ngưỡng hoặc nhiệt độ quá cao → còi, cảnh báo trên Web, ngắt điều hòa, bật quạt thông gió, mở cửa thoát hiểm |
+| **Tự động hóa** | Trời tối → bật đèn Ban công; tối + có người (An ninh bật hay tắt) → bật đèn Phòng khách, hết chuyển động 3 giây thì tắt; nóng > 33 °C → bật điều hòa (không tự tắt); khí gas mức cao hoặc báo cháy → bật quạt, hết thì tắt. Lệnh tay giữ ưu tiên tới khi cảm biến đổi trạng thái (tối đa 5 phút) |
 | **Cửa ra vào** | Nhận diện khuôn mặt thành viên (OpenCV) để mở cửa; nút Mở/Đóng cửa trên Web; mở cửa hợp lệ tự tắt An ninh; cảnh báo "cửa chưa đóng hẳn" khi có cảm biến cửa |
-| **Trợ lý giọng nói** | Gemini Live tiếng Việt: bật/tắt đèn, phát/tạm dừng/tiếp tục nhạc, bật An ninh, đóng cửa, hỏi nhiệt độ/độ ẩm/trạng thái nhà. **Không** cho tắt An ninh hoặc mở cửa bằng giọng nói |
-| **Khác** | Phát nhạc từ thư viện `backend/music`, phát hiện lửa qua ảnh camera (OpenCV), app iOS (giám sát/điều khiển, cửa, nhạc, trợ lý Gemini) |
+| **Trợ lý giọng nói** | Gemini Live tiếng Việt: bật/tắt đèn, điều hòa, quạt; phát/tạm dừng/tiếp tục/tua nhạc; bật An ninh, đóng cửa, hỏi nhiệt độ/độ ẩm/trạng thái nhà. **Không** cho tắt An ninh hoặc mở cửa bằng giọng nói |
+| **Khác** | Phát nhạc từ thư viện `backend/music` (gõ vài chữ, có dấu hoặc không, rồi chọn bài trong danh sách gợi ý; có thanh tua và nút tua ±10 giây), phát hiện lửa qua ảnh camera (OpenCV), app iOS (giám sát/điều khiển, cửa, nhạc, trợ lý Gemini) |
 
 ## Kiến trúc
 
@@ -48,7 +48,7 @@ ESP32 DevKit V1, breadboard, 5 LED + điện trở 220–330 Ω, DHT11, PIR HC-S
 | MQ-2 (AO) | GPIO 34 | 3V3 (tạm thời) |
 | LDR (DO) | GPIO 35 | 3V3 |
 | Còi | GPIO 27 | 3V3 |
-| Relay 1 (quạt) / Relay 2 (đèn phụ) | GPIO 25 / 26 | 5V (VIN) |
+| Relay 1 (điều hòa) / Relay 2 (quạt) | GPIO 25 / 26 | 5V (VIN) |
 | Servo cửa | GPIO 13 | 5V (VIN), không bắt buộc tụ; xem mục 4.8 hướng dẫn đấu nối |
 | Reed switch cửa | GPIO 16 (chân kia nối GND) | – |
 
@@ -69,14 +69,11 @@ Các lệnh chạy từ thư mục gốc của dự án.
 
 ```bash
 # Tạo môi trường Python 3.12 và cài thư viện
-python3.12 -m venv backend/.venv
-backend/.venv/bin/pip install -r requirements.txt
+cd backend
+.venv/bin/pip install -r requirements.txt                 # chỉ cần lần đầu
+.venv/bin/python -m app.scripts.download_face_models      # chỉ cần lần đầu (mô hình nhận diện khuôn mặt)
+.venv/bin/uvicorn app.main:app --reload --timeout-graceful-shutdown 2 --host 0.0.0.0 --port 8000
 
-# Cấu hình: sao chép rồi điền GOOGLE_API_KEY
-cp backend/.env.example backend/.env
-
-# Tải mô hình nhận diện khuôn mặt (~38 MB, một lần)
-cd backend && .venv/bin/python -m app.scripts.download_face_models && cd ..
 ```
 
 Biến chính trong `backend/.env`:
@@ -91,7 +88,10 @@ Biến chính trong `backend/.env`:
 ### 2. Frontend
 
 ```bash
-cd frontend && npm install && cd ..
+cd frontend
+npm install        # chỉ cần lần đầu
+npm run dev
+
 ```
 
 ### 3. Firmware ESP32
@@ -141,7 +141,7 @@ Lần đầu macOS có thể hỏi cho Python nhận kết nối mạng: chọn 
 ## Sử dụng
 
 - **Điều khiển và giám sát:** card *Điều khiển thiết bị* (đèn, relay, chế độ An ninh, cảnh báo) và *Giám sát môi trường* (số liệu, biểu đồ, bảng).
-- **Giọng nói:** card *Trò chuyện với Gemini* → **Bật micro** → nói, ví dụ "bật đèn phòng khách", "nhiệt độ phòng bao nhiêu?", "bật chế độ an ninh", "đóng cửa", "phát bài Phép Màu", "tạm dừng nhạc".
+- **Giọng nói:** card *Trò chuyện với Gemini* → **Bật micro** → nói, ví dụ "bật đèn phòng khách", "nhiệt độ phòng bao nhiêu?", "bật điều hòa", "tắt quạt", "bật chế độ an ninh", "đóng cửa", "phát bài Phép Màu", "tạm dừng nhạc", "tua tới 30 giây".
 - **Cửa và khuôn mặt:** card *Cửa ra vào* → chọn camera (webcam hoặc camera USB) → **Bật camera**.
   - Tab *Thành viên*: nhập tên, **Chụp mẫu** 3–10 lần, **Lưu thành viên**.
   - Tab *Nhận diện*: thành viên đứng trước camera khoảng 1,5 giây thì cửa mở; nút **Mở cửa** / **Đóng cửa** điều khiển tay.
@@ -180,7 +180,8 @@ Mọi chân, mức kích và ngưỡng nằm trong [esp32-firmware/include/confi
 
 - `RELAY_ACTIVE_LOW`, `BUZZER_ACTIVE_LOW`, `LDR_DARK_LEVEL`: mức kích theo module thực tế.
 - `MQ2_ALARM_ON` / `MQ2_ALARM_OFF`: ngưỡng báo khói/gas (MQ-2 đang cấp 3V3, chưa hiệu chuẩn).
-- `FAN_ON_C` / `FAN_OFF_C`: ngưỡng bật/tắt quạt.
+- `AC_ON_C` / `AC_REARM_C`: ngưỡng bật điều hòa / nhiệt độ phải xuống tới để lần nóng sau tự bật lại.
+- `MQ2_WARNING_LEVEL` / `MQ2_FAN_OFF`: ngưỡng bật/tắt quạt thông gió theo khí gas.
 - `DOOR_SENSOR_ENABLED`: bật sau khi đã lắp reed switch; `DOOR_AUTO_CLOSE_MS`: `0` = cửa không tự đóng.
 
 Đổi chân trên mạch thì sửa `config.h`, nạp lại firmware và cập nhật tài liệu đấu nối.

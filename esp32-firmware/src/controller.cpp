@@ -89,14 +89,12 @@ void Controller::updateAlarms(uint32_t now) {
   // Cháy: mở và giữ cửa mở để thoát hiểm; hết cháy thì cửa vẫn mở cho tới khi có lệnh đóng.
   door_.setHold(fireAlarm(), now);
 
-  // Ngắt cầu dao mô phỏng: cắt cả hai relay và bỏ lệnh tay đang giữ.
+  // Cháy: ngắt điều hòa (bỏ lệnh tay đang giữ); quạt thông gió do updateAutomation bật.
   if (fireAlarm()) {
-    for (uint8_t i = 0; i < RELAY_COUNT; i++) {
-      relayOverrides_[i].active = false;
-      if (outputs_.relay(i)) {
-        outputs_.setRelay(i, false);
-        changed_ = true;
-      }
+    relayOverrides_[RELAY_AC].active = false;
+    if (outputs_.relay(RELAY_AC)) {
+      outputs_.setRelay(RELAY_AC, false);
+      changed_ = true;
     }
   }
 
@@ -126,35 +124,45 @@ void Controller::updateAlarms(uint32_t now) {
 void Controller::updateAutomation(uint32_t now) {
   const SensorReadings& r = sensors_.readings();
 
-  // An ninh TẮT: trời tối và có chuyển động -> bật đèn phòng khách; PIR hết báo chuyển động
+  // Trời tối và có chuyển động -> bật đèn phòng khách, dù An ninh bật hay tắt; PIR hết báo chuyển động
   // LIVING_LIGHT_OFF_DELAY_MS thì tắt (chỉ khi đèn do tự động hóa bật, xem applyLivingLight). Chỉ xét LDR lúc bật: khi đèn đã sáng, ánh sáng của
   // chính các LED có thể làm LDR báo "sáng" và làm đèn tắt dù người vẫn còn đó.
-  if (armed_) {
-    livingAutoOn_ = false;
-  } else if (r.motion) {
+  if (r.motion) {
     if (r.isDark) livingAutoOn_ = true;
     lastMotionAt_ = now;
   } else if (livingAutoOn_ && now - lastMotionAt_ >= LIVING_LIGHT_OFF_DELAY_MS) {
     livingAutoOn_ = false;
   }
 
+  // Điều hòa: chỉ bật lúc nhiệt độ vừa vượt AC_ON_C, không bao giờ tự tắt. Đang cháy thì không bật;
+  // nếu hết cháy mà vẫn còn nóng thì bật lại.
   if (r.dhtOk) {
-    if (!fanAutoOn_ && r.temperatureC >= FAN_ON_C) fanAutoOn_ = true;
-    if (fanAutoOn_ && r.temperatureC <= FAN_OFF_C) fanAutoOn_ = false;
+    if (!acHot_ && r.temperatureC > AC_ON_C) {
+      acHot_ = true;
+      acPending_ = true;
+    } else if (acHot_ && r.temperatureC <= AC_REARM_C) {
+      acHot_ = false;
+      acPending_ = false;
+    }
   }
-
-  // Đèn phụ chỉ phản ứng lúc báo trộm bắt đầu/kết thúc; ngoài lúc đó giữ theo lệnh tay.
-  if (intrusionAlarm_ != alarmLightOn_) {
-    alarmLightOn_ = intrusionAlarm_;
-    if (!fireAlarm() && outputs_.relay(RELAY_ALARM_LIGHT) != alarmLightOn_) {
-      outputs_.setRelay(RELAY_ALARM_LIGHT, alarmLightOn_);
+  if (acPending_ && !fireAlarm()) {
+    acPending_ = false;
+    if (!outputs_.relay(RELAY_AC)) {
+      outputs_.setRelay(RELAY_AC, true);
       changed_ = true;
+      event("Nhiet do cao: bat dieu hoa");
     }
   }
 
-  applyLivingLight();
+  // Quạt thông gió: khí gas mức cao (hysteresis MQ2_FAN_OFF) hoặc đang báo cháy.
+  if (r.mq2Ready) {
+    if (!fanGas_ && r.mq2Raw >= MQ2_WARNING_LEVEL) fanGas_ = true;
+    if (fanGas_ && r.mq2Raw < MQ2_FAN_OFF) fanGas_ = false;
+  }
+
+  applyLivingLight(now);
   applyAutomated(false, LED_BAN_CONG, r.isDark, now);
-  if (!fireAlarm()) applyAutomated(true, RELAY_FAN, fanAutoOn_, now);
+  applyAutomated(true, RELAY_FAN, fanGas_ || fireAlarm(), now);
 }
 
 void Controller::applyAutomated(bool isRelay, uint8_t index, bool autoValue, uint32_t now) {
@@ -181,16 +189,17 @@ void Controller::applyAutomated(bool isRelay, uint8_t index, bool autoValue, uin
   changed_ = true;
 }
 
-void Controller::applyLivingLight() {
-  // Chỉ bật lúc điều kiện vừa xuất hiện (tối + chuyển động) và chỉ tắt đèn do chính tự động hóa
-  // bật. Đèn bật bằng lệnh tay giữ nguyên tới khi người dùng tắt; tắt bằng lệnh tay thì phải chờ
-  // lần chuyển động kế tiếp mới tự bật lại.
-  bool& lastAuto = ledLastAuto_[LED_PHONG_KHACH];
-  const bool started = livingAutoOn_ && !lastAuto;
-  lastAuto = livingAutoOn_;
+void Controller::applyLivingLight(uint32_t now) {
+  // Tối + chuyển động -> bật; chỉ tắt đèn do chính tự động hóa bật (đèn bật bằng lệnh tay giữ
+  // nguyên tới khi người dùng tắt). Tắt bằng lệnh tay thì chặn tự bật lại tới khi hết chuyển động
+  // hoặc hết LIVING_MANUAL_OFF_HOLD_MS — PIR có thể báo chuyển động liên tục rất lâu nên không thể
+  // chỉ chờ hết chuyển động.
+  if (livingManualOff_ && (!livingAutoOn_ || timeReached(now, livingManualOffUntil_))) {
+    livingManualOff_ = false;
+  }
 
   const bool on = outputs_.led(LED_PHONG_KHACH);
-  if (started && !on) {
+  if (livingAutoOn_ && !on && !livingManualOff_) {
     outputs_.setLed(LED_PHONG_KHACH, true);
     livingLightAuto_ = true;
     changed_ = true;
@@ -218,7 +227,11 @@ void Controller::applyBuzzer() {
 
 CommandResult Controller::setLedByUser(uint8_t index, bool on, uint32_t now) {
   if (index >= LED_COUNT) return CommandResult::InvalidTarget;
-  if (index == LED_PHONG_KHACH) livingLightAuto_ = false;
+  if (index == LED_PHONG_KHACH) {
+    livingLightAuto_ = false;
+    livingManualOff_ = !on;
+    livingManualOffUntil_ = now + LIVING_MANUAL_OFF_HOLD_MS;
+  }
   if (isAutomatedLed(index)) setOverride(ledOverrides_[index], on, now);
   if (outputs_.led(index) != on) changed_ = true;
   outputs_.setLed(index, on);
@@ -227,8 +240,9 @@ CommandResult Controller::setLedByUser(uint8_t index, bool on, uint32_t now) {
 
 CommandResult Controller::setRelayByUser(uint8_t index, bool on, uint32_t now) {
   if (index >= RELAY_COUNT) return CommandResult::InvalidTarget;
-  if (on && fireAlarm()) return CommandResult::BlockedByFire;
+  if (on && fireAlarm() && index == RELAY_AC) return CommandResult::BlockedByFire;
   if (index == RELAY_FAN) setOverride(relayOverrides_[index], on, now);
+  if (index == RELAY_AC && on) acPending_ = false;
   if (outputs_.relay(index) != on) changed_ = true;
   outputs_.setRelay(index, on);
   return CommandResult::Ok;
