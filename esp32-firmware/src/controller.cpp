@@ -6,6 +6,8 @@ bool timeReached(uint32_t now, uint32_t at) { return (int32_t)(now - at) >= 0; }
 
 constexpr const char* PREFS_NAMESPACE = "smarthome";
 constexpr const char* PREFS_ARMED = "armed";
+constexpr const char* PREFS_AUTO_LIGHT = "auto_light";
+constexpr const char* PREFS_AUTO_AC = "auto_ac";
 
 }  // namespace
 
@@ -13,6 +15,8 @@ void Controller::begin(uint32_t now) {
   prefs_.begin(PREFS_NAMESPACE, false);
   // Giữ trạng thái An ninh qua lần khởi động lại (mất điện, reset).
   armed_ = prefs_.getBool(PREFS_ARMED, false);
+  motionLightEnabled_ = prefs_.getBool(PREFS_AUTO_LIGHT, true);
+  acAutoEnabled_ = prefs_.getBool(PREFS_AUTO_AC, true);
   armActiveAt_ = now + ARM_EXIT_DELAY_MS;
   if (armed_) event("An ninh dang BAT (khoi phuc sau khoi dong)");
 }
@@ -127,7 +131,10 @@ void Controller::updateAutomation(uint32_t now) {
   // Trời tối và có chuyển động -> bật đèn phòng khách, dù An ninh bật hay tắt; PIR hết báo chuyển động
   // LIVING_LIGHT_OFF_DELAY_MS thì tắt (chỉ khi đèn do tự động hóa bật, xem applyLivingLight). Chỉ xét LDR lúc bật: khi đèn đã sáng, ánh sáng của
   // chính các LED có thể làm LDR báo "sáng" và làm đèn tắt dù người vẫn còn đó.
-  if (r.motion) {
+  // Tắt chức năng từ web: bỏ điều kiện tự động, đèn đang sáng do tự động bật sẽ tắt (applyLivingLight).
+  if (!motionLightEnabled_) {
+    livingAutoOn_ = false;
+  } else if (r.motion) {
     if (r.isDark) livingAutoOn_ = true;
     lastMotionAt_ = now;
   } else if (livingAutoOn_ && now - lastMotionAt_ >= LIVING_LIGHT_OFF_DELAY_MS) {
@@ -136,7 +143,7 @@ void Controller::updateAutomation(uint32_t now) {
 
   // Điều hòa: chỉ bật lúc nhiệt độ vừa vượt AC_ON_C, không bao giờ tự tắt. Đang cháy thì không bật;
   // nếu hết cháy mà vẫn còn nóng thì bật lại.
-  if (r.dhtOk) {
+  if (acAutoEnabled_ && r.dhtOk) {
     if (!acHot_ && r.temperatureC > AC_ON_C) {
       acHot_ = true;
       acPending_ = true;
@@ -145,7 +152,7 @@ void Controller::updateAutomation(uint32_t now) {
       acPending_ = false;
     }
   }
-  if (acPending_ && !fireAlarm()) {
+  if (acAutoEnabled_ && acPending_ && !fireAlarm()) {
     acPending_ = false;
     if (!outputs_.relay(RELAY_AC)) {
       outputs_.setRelay(RELAY_AC, true);
@@ -274,6 +281,30 @@ void Controller::silenceAlarm() {
 void Controller::simulateGas(bool active) {
   simulatedGas_ = active;
   changed_ = true;
+}
+
+bool Controller::setAutomation(const char* id, bool enabled) {
+  bool* flag = nullptr;
+  const char* key = nullptr;
+  if (strcmp(id, AUTO_MOTION_LIGHT) == 0) {
+    flag = &motionLightEnabled_;
+    key = PREFS_AUTO_LIGHT;
+  } else if (strcmp(id, AUTO_AC) == 0) {
+    flag = &acAutoEnabled_;
+    key = PREFS_AUTO_AC;
+    // Bật lại: xét lại từ đầu, đang nóng sẵn thì điều hòa bật ngay. Tắt: bỏ lần bật đang chờ.
+    acHot_ = false;
+    acPending_ = false;
+  } else {
+    return false;
+  }
+  if (*flag != enabled) {
+    *flag = enabled;
+    prefs_.putBool(key, enabled);
+    changed_ = true;
+    Serial.printf("[SU KIEN] Tu dong hoa %s: %s\n", id, enabled ? "BAT" : "TAT");
+  }
+  return true;
 }
 
 void Controller::setOverride(Override& o, bool value, uint32_t now) {

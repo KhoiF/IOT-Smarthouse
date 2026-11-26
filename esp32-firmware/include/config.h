@@ -117,6 +117,9 @@ constexpr uint32_t STATUS_LOG_INTERVAL_MS = 2000;
 // Mạng
 // ---------------------------------------------------------------------------
 constexpr const char* RELAY_IDS[RELAY_COUNT] = {"relay1", "relay2"};
+// Tự động hóa bật/tắt được từ web (khớp backend/app/core/rooms.py).
+constexpr const char* AUTO_MOTION_LIGHT = "motion_light";
+constexpr const char* AUTO_AC = "ac_auto";
 
 constexpr uint32_t WIFI_RETRY_MS = 10000;
 constexpr uint32_t TELEMETRY_INTERVAL_MS = 2000;

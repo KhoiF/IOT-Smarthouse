@@ -21,6 +21,7 @@ enum class CommandResult : uint8_t { Ok, InvalidTarget, BlockedByFire, DoorHeldB
 // - Khí gas mức cao hoặc báo cháy -> bật quạt thông gió (relay 2), hết thì tắt.
 // - Cửa: mở theo lệnh (kèm tắt An ninh), đóng theo lệnh; cháy -> mở để thoát hiểm (giữ An ninh);
 //   cửa bị mở trái phép khi An ninh bật -> báo trộm.
+// - Đèn theo chuyển động và tự bật điều hòa bật/tắt được từ web (setAutomation), lưu NVS.
 // - Lệnh tay/AI trên đầu ra tự động giữ ưu tiên USER_OVERRIDE_MS hoặc tới khi cảm biến đổi trạng thái.
 class Controller {
  public:
@@ -37,6 +38,8 @@ class Controller {
   void setArmed(bool armed, uint32_t now);
   void silenceAlarm();
   void simulateGas(bool active);
+  // id: AUTO_MOTION_LIGHT hoặc AUTO_AC. Trả false nếu id không hợp lệ.
+  bool setAutomation(const char* id, bool enabled);
 
   bool armed() const { return armed_; }
   bool armingPending(uint32_t now) const;
@@ -47,6 +50,8 @@ class Controller {
   bool doorForced() const { return doorForced_; }
   bool alarmSilenced() const;
   bool gasSimulated() const { return simulatedGas_; }
+  bool motionLightEnabled() const { return motionLightEnabled_; }
+  bool acAutoEnabled() const { return acAutoEnabled_; }
   bool overrideActive(bool isRelay, uint8_t index, uint32_t now) const;
 
   // true nếu có đầu ra hoặc cảnh báo đổi kể từ lần gọi trước (để gửi telemetry ngay).
@@ -96,6 +101,8 @@ class Controller {
   bool livingManualOff_ = false;  // vừa tắt tay: chặn tự bật tới livingManualOffUntil_ hoặc hết chuyển động
   uint32_t livingManualOffUntil_ = 0;
   uint32_t lastMotionAt_ = 0;
+  bool motionLightEnabled_ = true;  // tối + chuyển động -> đèn phòng khách
+  bool acAutoEnabled_ = true;       // nóng -> điều hòa
   bool acHot_ = false;     // đang nóng (> AC_ON_C), chờ xuống AC_REARM_C để xét lần nóng kế tiếp
   bool acPending_ = false; // vừa nóng nhưng chưa bật được (đang cháy)
   bool fanGas_ = false;    // MQ-2 ở mức cao (có hysteresis)

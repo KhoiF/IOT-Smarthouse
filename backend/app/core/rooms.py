@@ -48,6 +48,13 @@ def find_room(text: str) -> Optional[Room]:
     return next((room for room in ROOMS if room.id == key), None)
 
 
+# Tự động hóa bật/tắt được từ web (khớp AUTO_* trong esp32-firmware/include/config.h).
+AUTOMATIONS: dict[str, str] = {
+    "motion_light": "Đèn phòng khách theo chuyển động",
+    "ac_auto": "Tự bật điều hòa khi nóng",
+}
+
+
 # Tên gọi khác (đã chuẩn hoá) để tìm relay theo lời nói: "máy lạnh", "quạt thông gió"...
 RELAY_ALIASES: dict[str, str] = {
     "dieu_hoa": "relay1",

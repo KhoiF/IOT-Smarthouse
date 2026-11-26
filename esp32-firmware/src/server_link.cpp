@@ -213,6 +213,12 @@ void ServerLink::handleCommand(const uint8_t* payload, size_t length) {
     error = errorCode(controller_.openDoorByUser(now));
   } else if (strcmp(action, "close_door") == 0) {
     error = errorCode(controller_.closeDoorByUser(now));
+  } else if (strcmp(action, "set_automation") == 0) {
+    if (!doc["on"].is<bool>()) {
+      error = "bad_request";
+    } else if (!controller_.setAutomation(doc["id"] | "", doc["on"].as<bool>())) {
+      error = "invalid_target";
+    }
   } else if (strcmp(action, "silence") == 0) {
     controller_.silenceAlarm();
   } else {
@@ -294,6 +300,10 @@ void ServerLink::fillState(JsonObject state) {
   JsonObject security = state["security"].to<JsonObject>();
   security["armed"] = controller_.armed();
   security["arming"] = controller_.armingPending(now);
+
+  JsonObject automation = state["automation"].to<JsonObject>();
+  automation[AUTO_MOTION_LIGHT] = controller_.motionLightEnabled();
+  automation[AUTO_AC] = controller_.acAutoEnabled();
 
   JsonObject door = state["door"].to<JsonObject>();
   door["state"] = Door::stateName(door_.state());
