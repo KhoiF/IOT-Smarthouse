@@ -20,6 +20,9 @@ export const useMusicController = ({ showFeedback }: UseMusicControllerOptions) 
   const musicReconnectTimer = useRef<number | null>(null);
   const autoplayUnlockCleanupRef = useRef<(() => void) | null>(null);
   const isMusicControlFromServerRef = useRef<boolean>(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const musicStateRef = useRef<MusicPlaybackState | null>(null);
 
   const clearPendingAutoplayUnlock = useCallback(() => {
     const cleanup = autoplayUnlockCleanupRef.current;
@@ -32,6 +35,7 @@ export const useMusicController = ({ showFeedback }: UseMusicControllerOptions) 
   const updateMusicState = useCallback(
     (state: MusicPlaybackState | null) => {
       if (!state) {
+        musicStateRef.current = null;
         setMusicState(null);
         setLiveMusicPosition(0);
         setIsMusicPaused(false);
@@ -39,6 +43,7 @@ export const useMusicController = ({ showFeedback }: UseMusicControllerOptions) 
         return;
       }
 
+      musicStateRef.current = state;
       setMusicState(state);
       setLiveMusicPosition(state.position_seconds);
       setIsMusicPaused(state.status !== "playing");
@@ -227,19 +232,18 @@ export const useMusicController = ({ showFeedback }: UseMusicControllerOptions) 
     }
   }, [updateMusicState]);
 
-  const handleMusicSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const title = musicTitle.trim();
-      if (!title) {
+  // exact = true: bài được chọn từ danh sách gợi ý/thư viện, phát đúng tên.
+  const playSong = useCallback(
+    async (title: string, exact: boolean) => {
+      const trimmed = title.trim();
+      if (!trimmed) {
         showFeedback("Vui lòng nhập tên bài hát", true);
         return;
       }
-
       try {
         const response = await apiClient<MusicPlaybackResponse>("/smart-home/music/play", {
           method: "POST",
-          body: JSON.stringify({ title })
+          body: JSON.stringify({ title: trimmed, exact })
         });
         const playbackStarted = await beginMusicPlayback(response.selected_song, response.stream_url);
         updateMusicState(response.playback_state);
@@ -252,14 +256,126 @@ export const useMusicController = ({ showFeedback }: UseMusicControllerOptions) 
           );
         }
         setMusicTitle("");
+        setSuggestions([]);
       } catch (error) {
         if (error instanceof Error) {
           showFeedback(error.message, true);
         }
       }
     },
-    [beginMusicPlayback, musicTitle, showFeedback, updateMusicState]
+    [beginMusicPlayback, showFeedback, updateMusicState]
   );
+
+  const handleMusicSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      // Có gợi ý thì phát bài khớp nhất, không bắt nhập đúng tên.
+      if (suggestions.length) {
+        await playSong(suggestions[0], true);
+        return;
+      }
+      await playSong(musicTitle, false);
+    },
+    [musicTitle, playSong, suggestions]
+  );
+
+  const seekTo = useCallback(
+    async (seconds: number) => {
+      const audioElement = audioPlayerRef.current;
+      const duration =
+        audioElement && Number.isFinite(audioElement.duration) && audioElement.duration > 0
+          ? audioElement.duration
+          : musicStateRef.current?.duration_seconds ?? null;
+      let target = Math.max(0, seconds);
+      if (duration) {
+        target = Math.min(target, Math.max(0, duration - 0.5));
+      }
+      if (audioElement) {
+        audioElement.currentTime = target;
+      }
+      setLiveMusicPosition(target);
+      try {
+        const state = await apiClient<MusicPlaybackState>("/smart-home/music/seek", {
+          method: "POST",
+          body: JSON.stringify({ position_seconds: target })
+        });
+        updateMusicState(state);
+      } catch (error) {
+        console.error("Không thể cập nhật vị trí tua", error);
+      }
+    },
+    [updateMusicState]
+  );
+
+  const seekBy = useCallback(
+    (deltaSeconds: number) => {
+      const audioElement = audioPlayerRef.current;
+      const current = audioElement ? audioElement.currentTime : liveMusicPosition;
+      void seekTo(current + deltaSeconds);
+    },
+    [liveMusicPosition, seekTo]
+  );
+
+  // Người dùng tua bằng thanh điều khiển của thẻ audio: báo vị trí mới cho máy chủ để
+  // trạng thái không bị kéo ngược về chỗ cũ. Bỏ qua khi chính máy chủ vừa tua (giọng nói).
+  const handleAudioSeeked = useCallback(() => {
+    const audioElement = audioPlayerRef.current;
+    const state = musicStateRef.current;
+    if (!audioElement || !state?.matched_song) {
+      return;
+    }
+    const elapsed = state.status === "playing" ? Date.now() / 1000 - state.updated_at : 0;
+    const expected = state.position_seconds + Math.max(0, elapsed);
+    if (Math.abs(audioElement.currentTime - expected) < 1.5) {
+      return;
+    }
+    void apiClient<MusicPlaybackState>("/smart-home/music/seek", {
+      method: "POST",
+      body: JSON.stringify({ position_seconds: audioElement.currentTime })
+    })
+      .then(updateMusicState)
+      .catch((error) => console.error("Không thể cập nhật vị trí tua", error));
+  }, [updateMusicState]);
+
+  const togglePlayPause = useCallback(() => {
+    const audioElement = audioPlayerRef.current;
+    if (!audioElement || !audioElement.src) {
+      return;
+    }
+    if (audioElement.paused) {
+      void audioElement.play().catch((error) => {
+        console.error("Không thể phát nhạc", error);
+        showFeedback("Không thể phát nhạc trên trình duyệt", true);
+      });
+    } else {
+      audioElement.pause();
+    }
+  }, [showFeedback]);
+
+  // Gợi ý bài hát theo từ khoá (chờ 200 ms sau khi ngừng gõ).
+  useEffect(() => {
+    const query = musicTitle.trim();
+    if (!query) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q: query, limit: "8" });
+        const result = await apiClient<string[]>(`/smart-home/music/search?${params.toString()}`);
+        if (!cancelled) {
+          setSuggestions(result);
+        }
+      } catch (error) {
+        console.error("Không thể tìm bài hát", error);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [musicTitle]);
 
   useEffect(() => {
     refreshMusicLibrary();
@@ -415,6 +531,14 @@ export const useMusicController = ({ showFeedback }: UseMusicControllerOptions) 
     currentSong,
     sortedLibrary,
     handleMusicSubmit,
+    suggestions,
+    playSong,
+    seekTo,
+    seekBy,
+    togglePlayPause,
+    handleAudioSeeked,
+    audioDuration,
+    setAudioDuration,
     handleMusicPause,
     handleMusicPlay,
     setLiveMusicPosition,

@@ -17,7 +17,7 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
-from app.core.rooms import ROOMS, find_room
+from app.core.rooms import RELAYS, ROOMS, find_relay, find_room
 from app.services.fire_detection_service import FireDetectionService
 from app.services.door_service import get_door_service
 from app.services.iot_service import IoTError, get_iot_service
@@ -38,20 +38,32 @@ class GeminiService:
     NGAY LẬP TỨC trước khi trả lời họ. Các tool bạn có thể sử dụng:
     - turn_on_light: bật đèn ở một phòng (Phòng khách, Phòng ngủ, Nhà bếp, Ban công, Nhà tắm)
     - turn_off_light: tắt đèn ở một phòng trong danh sách trên
+    - turn_on_device: bật Điều hòa hoặc Quạt (hai thiết bị nối qua relay)
+    - turn_off_device: tắt Điều hòa hoặc Quạt
     - enable_security_mode: bật chế độ An ninh chống trộm
     - close_door: đóng cửa ra vào
     - get_home_status: đọc số liệu cảm biến và trạng thái thiết bị trong nhà
     - play_music: phát bài hát gần giống nhất với tên được yêu cầu
     - pause_music: tạm dừng bài hát đang phát
     - continue_music: tiếp tục phát bài hát đã tạm dừng
+    - seek_music: tua bài hát đang phát tới một thời điểm, hoặc tua tới/lùi một số giây
 
     Quy tắc sử dụng tool:
-    1. Nếu người dùng nhắc đến bật đèn, chiếu sáng, sáng đèn,... hãy gọi tool turn_on_light.
-    2. Nếu người dùng nhắc đến tắt đèn, dập đèn,... hãy gọi tool turn_off_light.
+    1. Nếu người dùng nhắc đến bật đèn, chiếu sáng, sáng đèn,... ở một phòng, hãy gọi tool turn_on_light.
+    2. Nếu người dùng nhắc đến tắt đèn, dập đèn,... ở một phòng, hãy gọi tool turn_off_light.
+       "Điều hòa" và "Quạt" KHÔNG phải đèn phòng: bật/tắt điều hòa (máy lạnh), bật/tắt quạt thì gọi
+       turn_on_device / turn_off_device với device = "Điều hòa" hoặc "Quạt".
+       Điều hòa tự bật khi nhiệt độ trên 33 °C và không tự tắt. Quạt (thông gió) tự bật khi có khí gas
+       hoặc báo cháy; lệnh bằng giọng nói với quạt được ưu tiên trong 5 phút.
+       Khi đang báo cháy, ESP32 ngắt điều hòa và từ chối lệnh bật điều hòa: đọc lại lý do lỗi.
     3. Nếu người dùng muốn nghe nhạc, hãy gọi tool play_music và truyền tên bài hát họ nêu ra.
+       Nếu kết quả là not_found và có "suggestions", hãy đọc vài bài gợi ý để người dùng chọn.
     4. Nếu người dùng yêu cầu tạm dừng nhạc, hãy gọi tool pause_music.
     5. Nếu người dùng yêu cầu bật lại nhạc đã tạm dừng, hãy gọi tool continue_music.
-    6. Đèn được điều khiển qua thiết bị ESP32 thật. Nếu tool trả về result = "error",
+       Khi người dùng muốn tua nhạc: "tua tới 30 giây", "tua lại 10 giây" thì gọi seek_music với
+       offset_seconds (dương = tới, âm = lùi); "tua đến phút 1 giây 20", "phát từ đầu" thì gọi
+       seek_music với position_seconds (80, 0).
+    6. Đèn, điều hòa và quạt được điều khiển qua thiết bị ESP32 thật. Nếu tool trả về result = "error",
        hãy nói rõ lệnh chưa thực hiện được và đọc lại lý do trong "message"; không được nói đã bật/tắt.
     7. Khi người dùng hỏi về nhiệt độ, độ ẩm, trời sáng hay tối, có ai trong nhà/có chuyển động không,
        khói/gas, đèn hay thiết bị nào đang bật, chế độ An ninh hoặc có cảnh báo gì, hãy gọi
@@ -618,6 +630,45 @@ class GeminiService:
             return {"result": "error", "location": room.name, "message": error.message}
         return {"result": "success", "location": room.name, "state": "on" if turn_on else "off"}
 
+    async def _set_relay_via_device(self, device: str, turn_on: bool) -> Dict[str, Any]:
+        """Bật/tắt Điều hòa hoặc Quạt qua ESP32; chỉ báo success khi thiết bị ACK."""
+        relay = find_relay(device)
+        if relay is None:
+            return {
+                "result": "error",
+                "device": device,
+                "message": "Không có thiết bị này. Thiết bị bật/tắt được: "
+                + ", ".join(r.name for r in RELAYS),
+            }
+        try:
+            await get_iot_service().set_relay(relay, turn_on)
+        except IoTError as error:
+            return {"result": "error", "device": relay.name, "message": error.message}
+        return {"result": "success", "device": relay.name, "state": "on" if turn_on else "off"}
+
+    def _seek_music(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        state = self.smart_home_service.get_music_playback_state()
+        if not state.matched_song or state.status == "stopped":
+            return {"result": "no_active_song", "message": "Không có bài hát nào đang phát để tua"}
+        position = args.get("position_seconds")
+        offset = args.get("offset_seconds")
+        try:
+            if position is not None:
+                target = float(position)
+            elif offset is not None:
+                target = state.position_seconds + float(offset)
+            else:
+                return {"result": "error", "message": "Thiếu thời điểm hoặc số giây cần tua"}
+        except (TypeError, ValueError):
+            return {"result": "error", "message": "Thời gian tua không hợp lệ"}
+        new_state = self.smart_home_service.seek_music(target)
+        return {
+            "result": "success",
+            "matched_song": new_state.matched_song,
+            "position_seconds": round(new_state.position_seconds),
+            "duration_seconds": round(new_state.duration_seconds) if new_state.duration_seconds else None,
+        }
+
     @staticmethod
     def _home_status() -> Dict[str, Any]:
         summary = get_iot_service().assistant_summary()
@@ -666,6 +717,24 @@ class GeminiService:
                     types.FunctionResponse(id=function_call.id, name=name, response=result)
                 )
 
+            elif name in ("turn_on_device", "turn_off_device"):
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response=await self._set_relay_via_device(
+                            args.get("device", ""), name == "turn_on_device"
+                        ),
+                    )
+                )
+
+            elif name == "seek_music":
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id, name=name, response=self._seek_music(dict(args))
+                    )
+                )
+
             elif name == "play_music":
                 title = args.get("title", "")
                 matched = self.smart_home_service.play_music(title)
@@ -695,6 +764,7 @@ class GeminiService:
                         "result": "not_found",
                         "requested_title": title,
                         "stream_url": None,
+                        "suggestions": self.smart_home_service.search_music(title, limit=5),
                     }
                     await self._send_safely(
                         websocket,
@@ -890,6 +960,36 @@ class GeminiService:
                             },
                         ),
                         types.FunctionDeclaration(
+                            name="turn_on_device",
+                            description="Bật Điều hòa hoặc Quạt (thiết bị nối qua relay trên ESP32)",
+                            parameters={
+                                "type": "object",
+                                "properties": {
+                                    "device": {
+                                        "type": "string",
+                                        "enum": [relay.name for relay in RELAYS],
+                                        "description": "Thiết bị cần bật",
+                                    }
+                                },
+                                "required": ["device"],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="turn_off_device",
+                            description="Tắt Điều hòa hoặc Quạt (thiết bị nối qua relay trên ESP32)",
+                            parameters={
+                                "type": "object",
+                                "properties": {
+                                    "device": {
+                                        "type": "string",
+                                        "enum": [relay.name for relay in RELAYS],
+                                        "description": "Thiết bị cần tắt",
+                                    }
+                                },
+                                "required": ["device"],
+                            },
+                        ),
+                        types.FunctionDeclaration(
                             name="enable_security_mode",
                             description=(
                                 "Bật chế độ An ninh chống trộm: cảm biến chuyển động sẽ hú còi khi phát hiện người. "
@@ -917,7 +1017,7 @@ class GeminiService:
                             name="get_home_status",
                             description=(
                                 "Đọc số liệu mới nhất từ cảm biến trong nhà (nhiệt độ, độ ẩm, sáng/tối, "
-                                "chuyển động, khói/gas MQ-2), trạng thái đèn, quạt, đèn phụ, cửa ra vào, chế độ An ninh, "
+                                "chuyển động, khói/gas MQ-2), trạng thái đèn, điều hòa, quạt, cửa ra vào, chế độ An ninh, "
                                 "cảnh báo đang có, lần mở cửa/người đến gần nhất và thống kê nhiệt độ/độ ẩm trong 1 giờ"
                             ),
                             parameters={
@@ -946,6 +1046,27 @@ class GeminiService:
                             parameters={
                                 "type": "object",
                                 "properties": {},
+                                "required": [],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="seek_music",
+                            description=(
+                                "Tua bài hát đang phát. Dùng position_seconds để tới một thời điểm "
+                                "(tính từ đầu bài), hoặc offset_seconds để tua tới (dương) / lùi (âm)."
+                            ),
+                            parameters={
+                                "type": "object",
+                                "properties": {
+                                    "position_seconds": {
+                                        "type": "number",
+                                        "description": "Thời điểm cần tới, tính bằng giây từ đầu bài",
+                                    },
+                                    "offset_seconds": {
+                                        "type": "number",
+                                        "description": "Số giây tua tới (dương) hoặc lùi (âm) so với vị trí hiện tại",
+                                    },
+                                },
                                 "required": [],
                             },
                         ),

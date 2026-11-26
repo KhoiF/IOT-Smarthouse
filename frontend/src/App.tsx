@@ -22,7 +22,8 @@ export default function App() {
     setFeedback({ message, isError });
   }, []);
 
-  const { device, deviceState, history, pending, isStreamConnected, setLed, setRelay, setArmed, silenceAlarm } =
+  const { device, deviceState, history, pending, isStreamConnected, setLed, setRelay, setArmed,
+    setAutomation, silenceAlarm } =
     useIot({ showFeedback });
 
   // Trạng thái đèn đến từ luồng /ws/iot/updates sau khi ESP32 xác nhận, kể cả lệnh từ Gemini.
@@ -37,6 +38,14 @@ export default function App() {
     currentSong,
     sortedLibrary,
     handleMusicSubmit,
+    suggestions,
+    playSong,
+    seekTo,
+    seekBy,
+    togglePlayPause,
+    handleAudioSeeked,
+    audioDuration,
+    setAudioDuration,
     handleMusicPause,
     handleMusicPlay,
     setLiveMusicPosition,
@@ -103,6 +112,9 @@ export default function App() {
             onSetArmed={(armed) => {
               void setArmed(armed);
             }}
+            onSetAutomation={(automationId, on) => {
+              void setAutomation(automationId, on);
+            }}
             onSilenceAlarm={() => {
               void silenceAlarm();
             }}
@@ -118,6 +130,18 @@ export default function App() {
             musicTitle={musicTitle}
             onMusicTitleChange={setMusicTitle}
             onSubmit={handleMusicSubmit}
+            suggestions={suggestions}
+            onPlaySong={(title) => {
+              void playSong(title, true);
+            }}
+            audioDuration={audioDuration}
+            onAudioDurationChange={setAudioDuration}
+            onSeek={(seconds) => {
+              void seekTo(seconds);
+            }}
+            onSeekBy={seekBy}
+            onTogglePlayPause={togglePlayPause}
+            onAudioSeeked={handleAudioSeeked}
             audioPlayerRef={audioPlayerRef}
             currentSong={currentSong}
             sortedLibrary={sortedLibrary}

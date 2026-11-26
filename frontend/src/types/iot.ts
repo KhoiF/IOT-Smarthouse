@@ -46,6 +46,8 @@ export interface IotDeviceState {
   outputs: IotOutputs;
   security: IotSecurity;
   alarms: IotAlarms;
+  /** Firmware cũ không gửi trường này. */
+  automation?: Record<string, boolean>;
   door?: IotDoor;
 }
 

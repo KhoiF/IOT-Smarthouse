@@ -16,7 +16,7 @@ from typing import Any, Deque, Dict, Optional, Set
 from fastapi import WebSocket
 
 from app.core.config import settings
-from app.core.rooms import RELAYS, ROOMS, Relay, Room
+from app.core.rooms import AUTOMATIONS, RELAYS, ROOMS, Relay, Room
 from app.services.smart_home_service import LightingService, get_smart_home_service
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class CommandRejectedError(IoTError):
     status_code = 409
 
     _MESSAGES = {
-        "blocked_by_fire": "Đang có cảnh báo cháy, không thể bật relay",
+        "blocked_by_fire": "Đang có cảnh báo cháy, không thể bật điều hòa",
         "invalid_target": "Thiết bị không hợp lệ",
         "door_disabled": "ESP32 chưa bật chức năng cửa",
         "door_held_by_fire": "Đang có cảnh báo cháy, cửa được giữ mở để thoát hiểm",
@@ -113,11 +113,11 @@ class IoTService:
         if not sensors.get("mq2_ready"):
             gas_status = "cảm biến đang khởi động"
         elif alarms.get("gas") or sensors.get("gas_level") == "danger":
-            gas_status = "nguy hiểm (từ 2500), đang báo cháy"
+            gas_status = "nguy hiểm (từ 1800), đang báo cháy"
         elif sensors.get("gas_level") == "high":
-            gas_status = "cao (1600–2499), chưa tới mức báo cháy"
+            gas_status = "cao (800–1799), chưa tới mức báo cháy"
         else:
-            gas_status = "bình thường (dưới 1600)"
+            gas_status = "bình thường (dưới 800)"
 
         active_alarms = []
         if alarms.get("fire"):
@@ -153,6 +153,10 @@ class IoTService:
             "lights": {room.name: "bật" if leds.get(room.id) else "tắt" for room in ROOMS},
             "devices": {relay.name: "bật" if relays.get(relay.id) else "tắt" for relay in RELAYS},
             "security_mode": "bật" if (state.get("security") or {}).get("armed") else "tắt",
+            "automation": {
+                name: "bật" if (state.get("automation") or {}).get(key, True) else "tắt"
+                for key, name in AUTOMATIONS.items()
+            },
             "door": self._describe_door(state.get("door") or {}),
             "active_alarms": active_alarms,
         }
@@ -307,6 +311,9 @@ class IoTService:
 
     async def set_armed(self, armed: bool) -> Dict[str, Any]:
         return await self._send_command("set_armed", armed=armed)
+
+    async def set_automation(self, automation_id: str, on: bool) -> Dict[str, Any]:
+        return await self._send_command("set_automation", id=automation_id, on=on)
 
     async def silence_alarm(self) -> Dict[str, Any]:
         return await self._send_command("silence")

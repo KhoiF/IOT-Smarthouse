@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, ConfigDict
 
-from app.core.rooms import find_relay, find_room
+from app.core.rooms import AUTOMATIONS, find_relay, find_room
 from app.services.iot_service import IoTError, get_iot_service
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,14 @@ async def set_relay(relay_id: str, payload: SwitchRequest) -> Dict[str, Any]:
     if relay is None:
         raise HTTPException(status_code=404, detail=f"Không có relay '{relay_id}'")
     return await _run_command(iot_service.set_relay(relay, payload.on))
+
+
+@router.post("/iot/automation/{automation_id}")
+async def set_automation(automation_id: str, payload: SwitchRequest) -> Dict[str, Any]:
+    """Bật/tắt một chức năng tự động hóa trên ESP32 (motion_light, ac_auto)."""
+    if automation_id not in AUTOMATIONS:
+        raise HTTPException(status_code=404, detail=f"Không có chức năng tự động '{automation_id}'")
+    return await _run_command(iot_service.set_automation(automation_id, payload.on))
 
 
 @router.post("/iot/security")

@@ -3,7 +3,7 @@ from typing import List, Optional, Literal
 from mimetypes import guess_type
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, confloat, constr
 
@@ -29,6 +29,8 @@ class LightResponse(BaseModel):
 
 class MusicRequest(BaseModel):
     title: constr(strip_whitespace=True, min_length=1)
+    # true khi bài được chọn từ danh sách gợi ý: phát đúng tên, không tìm gần đúng.
+    exact: bool = False
 
 
 class MusicPlaybackStateResponse(BaseModel):
@@ -104,9 +106,18 @@ def list_music_library() -> List[str]:
     return smart_home_service.list_music()
 
 
+@router.get("/music/search", response_model=List[str])
+def search_music(q: str = "", limit: int = Query(8, ge=1, le=50)) -> List[str]:
+    """Gợi ý bài hát theo từ khoá (không phân biệt dấu, gõ một phần tên vẫn ra)."""
+    return smart_home_service.search_music(q, limit=limit)
+
+
 @router.post("/music/play", response_model=MusicResponse)
 def play_music(payload: MusicRequest) -> MusicResponse:
-    selected = smart_home_service.play_music(payload.title)
+    if payload.exact:
+        selected = smart_home_service.play_exact_song(payload.title)
+    else:
+        selected = smart_home_service.play_music(payload.title)
     if not selected:
         raise HTTPException(status_code=404, detail="Không tìm được bài hát phù hợp")
     file_path = smart_home_service.get_song_file(selected)

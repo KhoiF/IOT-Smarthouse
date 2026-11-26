@@ -85,6 +85,12 @@ export const useIot = ({ showFeedback }: UseIotOptions) => {
     [sendCommand]
   );
 
+  const setAutomation = useCallback(
+    (automationId: string, on: boolean) =>
+      sendCommand(`automation:${automationId}`, `/iot/automation/${automationId}`, { on }),
+    [sendCommand]
+  );
+
   const silenceAlarm = useCallback(() => sendCommand("silence", "/iot/alarm/silence", {}), [sendCommand]);
 
   useEffect(() => {
@@ -158,6 +164,7 @@ export const useIot = ({ showFeedback }: UseIotOptions) => {
     setLed,
     setRelay,
     setArmed,
+    setAutomation,
     silenceAlarm
   };
 };

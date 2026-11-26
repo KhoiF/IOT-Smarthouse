@@ -89,8 +89,16 @@ downloads/
 
 CLAUDE.md
 Báo Cáo_ Hệ Thống Nhà Thông Minh (Smart Home) Hoàn Chỉnh.docx
+N10_Báo cáo BTL IoT.pdf
+# Tên có dấu trên macOS có thể ở dạng Unicode khác nên dòng trên không khớp.
+N10_*.pdf
 
 # Mô hình nhận diện khuôn mặt (tải bằng script) và dữ liệu khuôn mặt/nhật ký cửa (dữ liệu cá nhân)
 backend/models/
 backend/data/faces/
 backend/data/door_log.json
+
+# Trạng thái backend tự ghi khi chạy (lịch sử hội thoại, phiên Gemini, đèn); thiếu thì tự tạo lại
+backend/data/conversation_history.json
+backend/data/session_handle.json
+backend/data/light_state.json

@@ -29,8 +29,8 @@ ROOMS: tuple[Room, ...] = (
 )
 
 RELAYS: tuple[Relay, ...] = (
-    Relay("relay1", "Quạt"),
-    Relay("relay2", "Đèn phụ"),
+    Relay("relay1", "Điều hòa"),
+    Relay("relay2", "Quạt"),
 )
 
 
@@ -48,6 +48,32 @@ def find_room(text: str) -> Optional[Room]:
     return next((room for room in ROOMS if room.id == key), None)
 
 
+# Tự động hóa bật/tắt được từ web (khớp AUTO_* trong esp32-firmware/include/config.h).
+AUTOMATIONS: dict[str, str] = {
+    "motion_light": "Đèn phòng khách theo chuyển động",
+    "ac_auto": "Tự bật điều hòa khi nóng",
+}
+
+
+# Tên gọi khác (đã chuẩn hoá) để tìm relay theo lời nói: "máy lạnh", "quạt thông gió"...
+RELAY_ALIASES: dict[str, str] = {
+    "dieu_hoa": "relay1",
+    "may_lanh": "relay1",
+    "may_dieu_hoa": "relay1",
+    "ac": "relay1",
+    "quat": "relay2",
+    "quat_dien": "relay2",
+    "quat_thong_gio": "relay2",
+    "quat_hut": "relay2",
+    "fan": "relay2",
+}
+
+
 def find_relay(relay_id: str) -> Optional[Relay]:
+    """Tìm relay theo id (relay1) hoặc tên (Điều hòa, Quạt), có/không dấu."""
     key = normalize_key(relay_id)
-    return next((relay for relay in RELAYS if relay.id == key), None)
+    key = RELAY_ALIASES.get(key, key)
+    return next(
+        (relay for relay in RELAYS if relay.id == key or normalize_key(relay.name) == key),
+        None,
+    )

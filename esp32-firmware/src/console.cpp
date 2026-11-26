@@ -111,6 +111,16 @@ void Console::handleLine(char* line, uint32_t now) {
     const bool high = strcmp(arg1, "high") == 0;
     digitalWrite(PIN_BUZZER, high ? HIGH : LOW);
     Serial.printf("GPIO%u = %s\n", PIN_BUZZER, high ? "HIGH" : "LOW");
+  } else if (strcmp(cmd, "auto") == 0) {
+    const int on = parseOnOff(arg2);
+    const char* id = arg1 && strcmp(arg1, "light") == 0 ? AUTO_MOTION_LIGHT
+                     : arg1 && strcmp(arg1, "ac") == 0  ? AUTO_AC
+                                                        : nullptr;
+    if (!id || on < 0) {
+      Serial.println("Cu phap: auto light|ac on|off");
+      return;
+    }
+    controller_.setAutomation(id, on == 1);
   } else if (strcmp(cmd, "sim") == 0 && arg1 && strcmp(arg1, "gas") == 0) {
     const int on = parseOnOff(arg2);
     if (on < 0) {
@@ -129,10 +139,11 @@ void Console::printHelp() {
   Serial.println("  status                  in toan bo trang thai");
   Serial.println("  log                     bat/tat dong log moi 2 giay");
   Serial.println("  led <1-5> on|off        1=phong khach 2=phong ngu 3=nha bep 4=ban cong 5=nha tam");
-  Serial.println("  relay <1-2> on|off      1=quat 2=den");
+  Serial.println("  relay <1-2> on|off      1=dieu hoa 2=quat");
   Serial.println("  door open | door close  mo cua / dong cua");
   Serial.println("  arm | disarm            bat/tat che do An ninh");
   Serial.println("  silence                 tat coi dang keu");
+  Serial.println("  auto light|ac on|off    bat/tat den theo chuyen dong / tu bat dieu hoa");
   Serial.println("  sim gas on|off          gia lap MQ-2 vuot nguong (khong can khoi that)");
   Serial.println("  buzz high|low           ghi thang muc len chan coi (do muc kich)");
   Serial.println("  mq2                     doc tho 20 mau MQ-2 (kiem tra nhieu)");
@@ -160,13 +171,15 @@ void Console::printStatus(uint32_t now) {
                   controller_.overrideActive(false, i, now) ? " (lenh tay)" : "");
   }
   for (uint8_t i = 0; i < RELAY_COUNT; i++) {
-    Serial.printf("Relay %u %-9s: %s%s\n", i + 1, i == RELAY_FAN ? "quat" : "den",
+    Serial.printf("Relay %u %-9s: %s%s\n", i + 1, i == RELAY_AC ? "dieu hoa" : "quat",
                   onOff(outputs_.relay(i)),
                   controller_.overrideActive(true, i, now) ? " (lenh tay)" : "");
   }
 
   Serial.printf("Cua       : %s%s%s\n", Door::stateName(door_.state()), door_.held() ? " (giu mo do chay)" : "",
                 DOOR_SENSOR_ENABLED ? (door_.sensorClosed() ? ", reed: dong" : ", reed: HO") : ", reed: chua lap");
+  Serial.printf("Tu dong    : den theo chuyen dong %s, tu bat dieu hoa %s\n",
+                controller_.motionLightEnabled() ? "BAT" : "tat", controller_.acAutoEnabled() ? "BAT" : "tat");
   Serial.printf("An ninh    : %s%s\n", controller_.armed() ? "BAT" : "tat",
                 controller_.armingPending(now) ? " (dang cho roi khu vuc)" : "");
   Serial.printf("Canh bao   : chay=%s (gas=%s%s, nhiet=%s) trom=%s%s\n",

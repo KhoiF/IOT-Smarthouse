@@ -27,7 +27,7 @@ Chân và ngưỡng trong firmware nằm ở [esp32-firmware/include/config.h](e
 | LDR (module 3 chân) | DO | GPIO 35 | 3V3 |
 | Còi (module 3 chân) | I/O | GPIO 27 | 3V3 |
 | Relay 2 kênh | IN1 / IN2 | GPIO 25 / GPIO 26 | 5V (VIN) |
-| Servo SG90 (cửa) | dây tín hiệu (cam/vàng) | GPIO 13 | 5V (VIN) + tụ 470 µF, hoặc adapter 5 V riêng (mục 4.8) |
+| Servo SG90 (cửa) | dây tín hiệu (cam/vàng) | GPIO 13 | 5V (VIN); nếu ESP32 reset khi cửa quay thì thêm tụ hoặc dùng adapter riêng (mục 4.8) |
 | Reed switch (cửa) | một chân | GPIO 16 (chân kia nối GND) | – |
 
 Mọi chân `GND` của module đều nối về **ray GND chung**.
@@ -120,9 +120,9 @@ Ngưỡng hiện tại (giá trị ADC đã lọc, đặt trong `config.h`):
 
 | Giá trị MQ-2 | Mức | Hệ thống |
 |---|---|---|
-| < 1600 | Bình thường | – |
-| 1600 – 2499 | Cao | Web hiện cảnh báo vàng, chưa hú còi |
-| ≥ 2500 liên tục 3 giây | Nguy hiểm | Báo cháy (còi, ngắt relay, mở cửa); hết khi xuống ≤ 2200 |
+| < 800 | Bình thường | – (quạt tắt khi xuống dưới 650) |
+| 800 – 1799 | Cao | Web hiện cảnh báo vàng, bật quạt thông gió, chưa hú còi |
+| ≥ 1800 liên tục 3 giây | Nguy hiểm | Báo cháy (còi, ngắt điều hòa, bật quạt, mở cửa); hết khi xuống ≤ 1500 |
 
 Nếu giá trị nhảy loạn giữa các lần đo (ví dụ 0 rồi 1500 rồi 20 chỉ trong vài giây) thì tín hiệu AO đang bị nhiễu: kiểm tra dây AO → D34, GND chung, và dùng lệnh Serial `mq2` để xem 20 mẫu thô liên tiếp.
 
@@ -199,9 +199,11 @@ Relay 2 – đèn 3,3 V:  3V3   ──► COM2    NO2 ──► đèn (+)     đ
 
 ### 4.8. Cửa: servo SG90 và công tắc từ (reed switch)
 
-**Servo SG90** (3 dây): chọn **một** trong hai cách cấp nguồn.
+**Servo SG90 – lắp không cần tụ**
 
-**Cách A – nối vào 5V (VIN) của ESP32** (gọn nhất, đủ cho mô hình khi cấp nguồn qua USB):
+Chuẩn bị: servo SG90 kèm tay quay (horn) và ốc, cánh cửa bằng formex/bìa **nhẹ và nhỏ** (khoảng 6×10 cm), keo nến, dây Dupont.
+
+**Bước 1 – Nối dây** (rút USB trước), cấp từ 5V (VIN) của ESP32:
 
 | Dây servo | Nối tới |
 |---|---|
@@ -210,36 +212,49 @@ Relay 2 – đèn 3,3 V:  3V3   ──► COM2    NO2 ──► đèn (+)     đ
 | Cam/vàng (tín hiệu) | GPIO 13 |
 
 ```
-ESP32 VIN ──┬──────────────► servo đỏ (VCC)
-            │
-          [tụ 470–1000 µF]   (chân dài/+ về phía VIN, chân −/vạch trắng về GND)
-            │
-ESP32 GND ──┴──────────────► servo nâu (GND)
+ESP32 VIN    ──────────────► servo đỏ (VCC)
+ESP32 GND    ──────────────► servo nâu (GND)
 ESP32 GPIO13 ──────────────► servo cam (tín hiệu)
 ```
 
-- Chân VIN lấy 5 V từ cổng USB (qua diode trên board nên thường còn khoảng 4,6–4,9 V; servo SG90 vẫn chạy tốt).
-- Servo kéo dòng lớn lúc bắt đầu quay (có thể vài trăm mA, lúc kẹt tới khoảng 0,7 A), cộng với relay và PIR trên cùng đường 5V. **Bắt buộc cắm tụ 470–1000 µF** sát servo để giảm sụt áp.
-- Firmware chỉ phát xung khoảng 0,7 giây mỗi lần đóng/mở rồi ngắt, nên lúc đứng yên servo gần như không tốn điện.
-- Không để cánh cửa bị kẹt hoặc vướng: servo kẹt sẽ kéo dòng tối đa liên tục.
-- Dùng cáp USB tốt, cắm thẳng vào máy (không qua hub).
-- **Dấu hiệu nguồn không đủ:** ESP32 tự khởi động lại mỗi khi cửa mở/đóng, Web báo ESP32 mất kết nối, hoặc log backend ghi `lý do khởi động gần nhất: brownout`. Khi đó chuyển sang **cách B**.
+**Bước 2 – Gắn servo làm bản lề cửa** (nhìn từ trên xuống):
 
-**Cách B – adapter 5 V riêng** (ổn định nhất, nên dùng khi có cả quạt trên relay):
+```
+   ═══════════╦══════════════  tường mô hình
+              ║ thân servo dán cố định, trục quay hướng lên
+              ●  ← trục servo = bản lề
+              │\
+   cửa ĐÓNG → │ \  ← cửa MỞ (quay 90°)
+              │  \
+        [nam châm]   [reed switch trên khung, đối diện nam châm]
+```
 
-| Dây servo | Nối tới |
+- Dán **thân servo** chặt vào khung/tường đúng vị trí bản lề, trục quay hướng lên.
+- **Chưa gắn tay quay vào cửa.** Cắm USB: khi khởi động, firmware tự đưa servo về **0° (đóng)**.
+- Lúc đó mới gắn tay quay lên trục, xoay sao cho cánh cửa **đang khép**, bắt ốc rồi dán tay quay vào mép trên hoặc mép dưới cánh cửa, sát phía bản lề.
+
+**Bước 3 – Thử và chỉnh** bằng Serial Monitor: `door open` (mở và giữ mở), `door close` (đóng), `status` (dòng `Cua`).
+
+| Hiện tượng | Chỉnh trong `config.h` rồi nạp lại |
 |---|---|
-| Nâu/đen (GND) | GND của adapter **và** ray GND của ESP32 (GND chung) |
-| Đỏ (VCC) | 5V của adapter |
-| Cam/vàng (tín hiệu) | GPIO 13 |
+| Cửa mở ngược chiều | `DOOR_CLOSED_ANGLE = 180`, `DOOR_OPEN_ANGLE = 90` |
+| Cửa chưa khép hẳn, hoặc đập vào khung và servo kêu rè | Lệch `DOOR_CLOSED_ANGLE` vài độ cho vừa khít |
+| Cửa mở chưa đủ rộng hoặc quá đà | Chỉnh `DOOR_OPEN_ANGLE` trong khoảng 80–110 |
 
-- **Không nối** 5V của adapter vào chân VIN của ESP32 khi đang cắm USB (hai nguồn 5 V chập nhau).
-- Vẫn cắm tụ 470–1000 µF giữa 5V và GND sát servo.
-- Nếu quạt (relay 1) cũng chạy bằng adapter, có thể cấp chung adapter 5 V–2 A cho cả quạt và servo.
+**Vì không có tụ, cần giữ dòng servo nhỏ:**
+- Cánh cửa phải **nhẹ** và **không bị kẹt hoặc chặn** ở cuối hành trình; servo bị chặn kéo dòng lớn nhất (tới khoảng 0,7 A) và kéo dài.
+- Firmware chỉ phát xung khoảng 0,7 giây mỗi lần đóng/mở rồi ngắt, nên lúc đứng yên servo gần như không tốn điện.
+- Dùng cáp USB tốt, cắm thẳng vào máy (không qua hub); tránh mở/đóng cửa đúng lúc quạt (relay 1) đang khởi động.
 
-**Sau khi nối (cả hai cách):**
-- Gắn cánh tay servo vào cánh cửa mô hình. Firmware dùng 0° là **đóng**, 90° là **mở** (`DOOR_CLOSED_ANGLE` / `DOOR_OPEN_ANGLE` trong `config.h`); đổi nếu cửa mở ngược chiều.
-- Firmware tự đưa servo về vị trí đóng khi khởi động, nên lắp cánh tay servo **sau** khi đã cấp nguồn một lần.
+**Bước 4 – Kiểm tra nguồn có đủ không:** mở/đóng cửa khoảng 10 lần rồi xem:
+- Serial Monitor có in lại dòng khởi động (`Nha thong minh - firmware…`) hoặc `Brownout detector was triggered` không?
+- Web có báo **ESP32 offline** rồi online lại đúng lúc cửa quay không? Log backend có `lý do khởi động gần nhất: brownout` không?
+
+Không thấy dấu hiệu nào thì **dùng tiếp không tụ**. Giá trị MQ-2 có thể nhích lên một chút lúc servo quay; firmware chỉ báo cháy khi MQ-2 ≥ 1800 liên tục 3 giây nên không gây báo cháy giả.
+
+Nếu ESP32 khởi động lại khi cửa quay, chọn một trong hai cách:
+- Cắm thêm **tụ hóa 470–1000 µF, từ 10 V trở lên** giữa 5V và GND sát servo (chân dài/+ vào 5V, chân có vạch trắng/− vào GND).
+- Hoặc **cấp servo bằng adapter 5 V riêng**: dây đỏ servo vào 5V của adapter, dây nâu vào GND adapter **và** ray GND của ESP32 (GND chung), dây cam vẫn vào GPIO 13. **Không nối** 5V của adapter vào VIN khi đang cắm USB.
 
 **Reed switch** (2 chân, không phân cực):
 - Một chân nối **GPIO 16**, chân kia nối **GND**. Không cần điện trở (firmware bật điện trở kéo lên bên trong).
@@ -260,7 +275,7 @@ Cách hoạt động:
 - [ ] Chỉ có một dây GND từ ESP32 vào ray `−`, và không dây GND nào cắm vào ray `+`.
 - [ ] Ray 3V3 và ray 5V không chạm nhau.
 - [ ] DHT11, LDR, MQ-2 (cách tạm thời) và còi lấy nguồn từ **3V3**.
-- [ ] PIR, relay (và servo nếu dùng cách A) lấy nguồn từ **5V (VIN)**; servo có tụ 470–1000 µF đúng cực.
+- [ ] PIR, relay và servo lấy nguồn từ **5V (VIN)** (hoặc servo dùng adapter riêng có GND chung); nếu có tụ thì cắm đúng cực.
 - [ ] Mỗi LED có điện trở riêng, chân dài về phía điện trở.
 - [ ] Không có chân 5 V nào nối thẳng vào GPIO.
 - [ ] Tải của relay chỉ là thiết bị 3,3–5 V.
