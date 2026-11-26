@@ -22,7 +22,8 @@ export default function App() {
     setFeedback({ message, isError });
   }, []);
 
-  const { device, deviceState, history, pending, isStreamConnected, setLed, setRelay, setArmed, silenceAlarm } =
+  const { device, deviceState, history, pending, isStreamConnected, setLed, setRelay, setArmed,
+    setAutomation, silenceAlarm } =
     useIot({ showFeedback });
 
   // Trạng thái đèn đến từ luồng /ws/iot/updates sau khi ESP32 xác nhận, kể cả lệnh từ Gemini.
@@ -110,6 +111,9 @@ export default function App() {
             }}
             onSetArmed={(armed) => {
               void setArmed(armed);
+            }}
+            onSetAutomation={(automationId, on) => {
+              void setAutomation(automationId, on);
             }}
             onSilenceAlarm={() => {
               void silenceAlarm();

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LightBulbIcon } from "@/components/icons/LightBulbIcon";
-import { MANUAL_OVERRIDE_NOTE, RELAYS, ROOMS, type IotSwitchInfo } from "@/lib/iot";
+import { AUTOMATIONS, MANUAL_OVERRIDE_NOTE, RELAYS, ROOMS, type IotSwitchInfo } from "@/lib/iot";
 import { cn } from "@/lib/utils";
 import type { IotDeviceInfo, IotDeviceState } from "@/types/iot";
 
@@ -13,6 +13,7 @@ interface DeviceControlCardProps {
   onSetLed: (roomId: string, on: boolean) => void;
   onSetRelay: (relayId: string, on: boolean) => void;
   onSetArmed: (armed: boolean) => void;
+  onSetAutomation: (automationId: string, on: boolean) => void;
   onSilenceAlarm: () => void;
 }
 
@@ -24,6 +25,7 @@ export function DeviceControlCard({
   onSetLed,
   onSetRelay,
   onSetArmed,
+  onSetAutomation,
   onSilenceAlarm
 }: DeviceControlCardProps) {
   const online = Boolean(device?.online && isStreamConnected);
@@ -85,6 +87,17 @@ export function DeviceControlCard({
             onChange={onSetArmed}
           />
         </section>
+
+        <SwitchGroup
+          title="Tự động hóa"
+          items={AUTOMATIONS}
+          values={deviceState?.automation}
+          pendingPrefix="automation"
+          pending={pending}
+          disabled={!online}
+          onChange={onSetAutomation}
+          note={deviceState && !deviceState.automation ? "Firmware ESP32 chưa hỗ trợ, cần nạp lại." : undefined}
+        />
 
         <SwitchGroup
           title="Đèn"
